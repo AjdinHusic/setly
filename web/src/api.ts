@@ -93,12 +93,16 @@ export function openConfig(path: string) {
 }
 
 export async function browsePath(
-  mode: "file" | "directory",
+  mode: "file" | "directory" | "save",
+  options?: { defaultName?: string },
 ): Promise<string | null> {
   const res = await fetch("/api/browse", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode }),
+    body: JSON.stringify({
+      mode,
+      defaultName: options?.defaultName,
+    }),
   });
   const text = await res.text();
   let data: { path?: string; error?: string; cancelled?: boolean };
@@ -134,17 +138,29 @@ export function saveDescribe(path: string, describe: DescribeConfig) {
 export function generateConfig(
   path: string,
   values: Record<string, unknown>,
-  mode: "overwrite" | "preview",
+  mode: "overwrite" | "preview" | "write",
+  options?: {
+    outputProviderId?: ProviderId;
+    outputPath?: string;
+  },
 ) {
   return request<{
     ok: true;
     mode: string;
     targetPath: string;
+    writtenPath: string | null;
     providerId: ProviderId;
+    outputProviderId: ProviderId;
     configData: unknown;
     text: string;
   }>("/api/generate", {
     method: "POST",
-    body: JSON.stringify({ path, values, mode }),
+    body: JSON.stringify({
+      path,
+      values,
+      mode,
+      outputProviderId: options?.outputProviderId,
+      outputPath: options?.outputPath,
+    }),
   });
 }

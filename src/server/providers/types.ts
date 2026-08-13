@@ -23,4 +23,6 @@ export interface ConfigProvider {
   parse(raw: string): Record<string, unknown>;
   serialize(data: unknown): string;
   describeSiblingName(targetFileName: string): string;
+  /** Default filename when exporting into this format from another provider. */
+  suggestedFileName(sourceFileName: string): string;
 }

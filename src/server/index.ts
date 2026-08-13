@@ -19,7 +19,8 @@ import {
   mergeDescribe,
   valuesFromAppsettings,
 } from "./describe.js";
-import { listProviderInfo, providerForPath } from "./providers/index.js";
+import { listProviderInfo, getProvider, providerForPath } from "./providers/index.js";
+import type { ProviderId } from "./providers/types.js";
 import type { DescribeConfig } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,8 +39,18 @@ export function createApp(options?: { staticDir?: string }) {
 
   app.post("/api/browse", async (req, res) => {
     try {
-      const mode = req.body?.mode === "directory" ? "directory" : "file";
-      const selectedPath = await browseNativePath(mode);
+      const rawMode = req.body?.mode;
+      const mode =
+        rawMode === "directory"
+          ? "directory"
+          : rawMode === "save"
+            ? "save"
+            : "file";
+      const defaultName =
+        typeof req.body?.defaultName === "string"
+          ? req.body.defaultName
+          : undefined;
+      const selectedPath = await browseNativePath(mode, { defaultName });
       res.json({ path: selectedPath, mode });
     } catch (err) {
       if (err instanceof BrowseCancelledError) {
@@ -167,7 +178,13 @@ export function createApp(options?: { staticDir?: string }) {
 
   app.post("/api/generate", async (req, res) => {
     try {
-      const { path: targetPathInput, values, mode } = req.body ?? {};
+      const {
+        path: targetPathInput,
+        values,
+        mode,
+        outputProviderId,
+        outputPath: outputPathInput,
+      } = req.body ?? {};
       if (typeof targetPathInput !== "string" || !targetPathInput.trim()) {
         res.status(400).json({ error: "path is required" });
         return;
@@ -176,13 +193,15 @@ export function createApp(options?: { staticDir?: string }) {
         res.status(400).json({ error: "values is required" });
         return;
       }
-      const generateMode = mode === "overwrite" ? "overwrite" : "preview";
+
+      const generateMode =
+        mode === "overwrite" ? "overwrite" : mode === "write" ? "write" : "preview";
 
       const targetPath = await resolveExistingPath(targetPathInput);
-      const provider = providerForPath(targetPath);
+      const sourceProvider = providerForPath(targetPath);
       const describePath = describePathFor(
         targetPath,
-        provider.describeSiblingName(path.basename(targetPath)),
+        sourceProvider.describeSiblingName(path.basename(targetPath)),
       );
       if (!(await pathExists(describePath))) {
         res.status(400).json({
@@ -191,22 +210,54 @@ export function createApp(options?: { staticDir?: string }) {
         return;
       }
 
+      let outputProvider = sourceProvider;
+      if (typeof outputProviderId === "string" && outputProviderId.trim()) {
+        try {
+          outputProvider = getProvider(outputProviderId as ProviderId);
+        } catch {
+          res.status(400).json({
+            error: `Unknown output provider: ${outputProviderId}`,
+          });
+          return;
+        }
+      }
+
       const describe = await readJsonFile<DescribeConfig>(describePath);
       const configData = buildAppsettingsFromValues(
         describe,
         values as Record<string, unknown>,
       );
-      const text = provider.serialize(configData);
+      const text = outputProvider.serialize(configData);
 
+      let writtenPath: string | null = null;
       if (generateMode === "overwrite") {
+        if (outputProvider.id !== sourceProvider.id) {
+          res.status(400).json({
+            error:
+              "Overwrite only writes the opened file’s native format. Choose Write to file for another format.",
+          });
+          return;
+        }
         await writeTextFile(targetPath, text);
+        writtenPath = targetPath;
+      } else if (generateMode === "write") {
+        if (typeof outputPathInput !== "string" || !outputPathInput.trim()) {
+          res.status(400).json({ error: "outputPath is required for write mode" });
+          return;
+        }
+        const outputPath = path.resolve(outputPathInput.trim());
+        await fs.mkdir(path.dirname(outputPath), { recursive: true });
+        await writeTextFile(outputPath, text);
+        writtenPath = outputPath;
       }
 
       res.json({
         ok: true,
         mode: generateMode,
         targetPath,
-        providerId: provider.id,
+        writtenPath,
+        providerId: sourceProvider.id,
+        outputProviderId: outputProvider.id,
         configData,
         text,
       });

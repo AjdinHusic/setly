@@ -1,11 +1,11 @@
-# setly
+# Setly — Guided UI for app settings, env vars, and config files
 
 [![CI](https://github.com/AjdinHusic/setly/actions/workflows/ci.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/ci.yml)
 [![Release](https://github.com/AjdinHusic/setly/actions/workflows/release-from-version.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/release-from-version.yml)
 [![Publish to npm](https://github.com/AjdinHusic/setly/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/publish-npm.yml)
-[![npm version](https://img.shields.io/npm/v/setly?color=0f766e)](https://www.npmjs.com/package/setly)
-[![npm downloads](https://img.shields.io/npm/dm/setly?color=0f766e)](https://www.npmjs.com/package/setly)
-[![Node.js](https://img.shields.io/node/v/setly?color=24292f)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/@husic/setly?color=0f766e)](https://www.npmjs.com/package/@husic/setly)
+[![npm downloads](https://img.shields.io/npm/dm/@husic/setly?color=0f766e)](https://www.npmjs.com/package/@husic/setly)
+[![Node.js](https://img.shields.io/node/v/@husic/setly?color=24292f)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/AjdinHusic/setly?display_name=tag&include_prereleases&color=111827)](https://github.com/AjdinHusic/setly/releases)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](https://github.com/AjdinHusic/setly/pulls)
@@ -28,7 +28,14 @@ Open http://127.0.0.1:5173. The API runs on port 3847 and is proxied from the UI
 
 On the home page, **Add project** and point at [`examples`](examples) (absolute path).
 
-### Production / global CLI
+### Install from npm
+
+```bash
+npm install -g @husic/setly
+setly
+```
+
+### Production / local CLI
 
 ```bash
 npm run build
@@ -68,6 +75,10 @@ Flags:
 | **JSON** | `appsettings.json`, `appsettings.*.json` |
 | **DotEnv** | `.env`, `.env.*` (skips `.env.example` / `.env.sample`) |
 
+When generating, pick any output format: preview, copy to clipboard, or write to a
+chosen path. Nested JSON keys flatten to DotEnv with `__` (e.g. `Host.Name` →
+`Host__Name`). Overwrite only updates the opened file in its native format.
+
 ## Storage
 
 Projects (root path, editable label, discovered configs) live in browser
@@ -91,4 +102,4 @@ Supported field types: `string`, `number`, `boolean`, `json`.
 
 Required secret in the repo (**Settings → Secrets and variables → Actions**):
 
-- `NPM_TOKEN` — npm automation/access token with permission to publish the `setly` package
+- `NPM_TOKEN` — npm automation/access token with permission to publish `@husic/setly` (or use Trusted Publishing)

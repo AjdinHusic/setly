@@ -36,4 +36,9 @@ export const jsonProvider: ConfigProvider = {
     const withoutExt = targetFileName.replace(/\.json$/i, "");
     return `describe-config.${withoutExt}.json`;
   },
+
+  suggestedFileName(sourceFileName: string): string {
+    if (this.matchesFileName(sourceFileName)) return sourceFileName;
+    return "appsettings.json";
+  },
 };

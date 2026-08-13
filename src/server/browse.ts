@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-export type BrowseMode = "file" | "directory";
+export type BrowseMode = "file" | "directory" | "save";
 
 export class BrowseCancelledError extends Error {
   constructor() {
@@ -16,11 +16,25 @@ function trimPath(stdout: string): string {
   return stdout.trim().replace(/\r?\n$/, "");
 }
 
-async function browseDarwin(mode: BrowseMode): Promise<string> {
-  const script =
-    mode === "directory"
-      ? 'POSIX path of (choose folder with prompt "Select project folder")'
-      : 'POSIX path of (choose file of type {"public.json", "json", "public.plain-text"} with prompt "Select a config file")';
+function escapeAppleScriptString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+async function browseDarwin(
+  mode: BrowseMode,
+  defaultName?: string,
+): Promise<string> {
+  let script: string;
+  if (mode === "directory") {
+    script =
+      'POSIX path of (choose folder with prompt "Select project folder")';
+  } else if (mode === "save") {
+    const name = escapeAppleScriptString(defaultName?.trim() || "config");
+    script = `POSIX path of (choose file name with prompt "Save generated config as" default name "${name}")`;
+  } else {
+    script =
+      'POSIX path of (choose file of type {"public.json", "json", "public.plain-text"} with prompt "Select a config file")';
+  }
 
   try {
     const { stdout } = await execFileAsync("osascript", ["-e", script], {
@@ -44,16 +58,31 @@ async function browseDarwin(mode: BrowseMode): Promise<string> {
   }
 }
 
-async function browseLinux(mode: BrowseMode): Promise<string> {
-  const args =
-    mode === "directory"
-      ? ["--file-selection", "--directory", "--title=Select project folder"]
-      : [
-        "--file-selection",
-        "--title=Select appsettings.json",
-        "--file-filter=JSON files | *.json",
-        "--file-filter=All files | *",
-      ];
+async function browseLinux(
+  mode: BrowseMode,
+  defaultName?: string,
+): Promise<string> {
+  let args: string[];
+  if (mode === "directory") {
+    args = ["--file-selection", "--directory", "--title=Select project folder"];
+  } else if (mode === "save") {
+    args = [
+      "--file-selection",
+      "--save",
+      "--confirm-overwrite",
+      "--title=Save generated config",
+    ];
+    if (defaultName?.trim()) {
+      args.push(`--filename=${defaultName.trim()}`);
+    }
+  } else {
+    args = [
+      "--file-selection",
+      "--title=Select appsettings.json",
+      "--file-filter=JSON files | *.json",
+      "--file-filter=All files | *",
+    ];
+  }
 
   try {
     const { stdout } = await execFileAsync("zenity", args, {
@@ -71,17 +100,32 @@ async function browseLinux(mode: BrowseMode): Promise<string> {
   }
 }
 
-async function browseWindows(mode: BrowseMode): Promise<string> {
-  const ps =
-    mode === "directory"
-      ? `
+async function browseWindows(
+  mode: BrowseMode,
+  defaultName?: string,
+): Promise<string> {
+  const safeDefault = (defaultName ?? "config").replace(/'/g, "''");
+  let ps: string;
+  if (mode === "directory") {
+    ps = `
 Add-Type -AssemblyName System.Windows.Forms;
 $d = New-Object System.Windows.Forms.FolderBrowserDialog;
 $d.Description = 'Select project folder';
 if ($d.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 1 };
 [Console]::Out.Write($d.SelectedPath)
-`
-      : `
+`;
+  } else if (mode === "save") {
+    ps = `
+Add-Type -AssemblyName System.Windows.Forms;
+$d = New-Object System.Windows.Forms.SaveFileDialog;
+$d.Filter = 'All files (*.*)|*.*|JSON files (*.json)|*.json|Env files (*.env)|*.env';
+$d.Title = 'Save generated config';
+$d.FileName = '${safeDefault}';
+if ($d.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 1 };
+[Console]::Out.Write($d.FileName)
+`;
+  } else {
+    ps = `
 Add-Type -AssemblyName System.Windows.Forms;
 $d = New-Object System.Windows.Forms.OpenFileDialog;
 $d.Filter = 'JSON files (*.json)|*.json|All files (*.*)|*.*';
@@ -89,6 +133,7 @@ $d.Title = 'Select appsettings.json';
 if ($d.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 1 };
 [Console]::Out.Write($d.FileName)
 `;
+  }
 
   try {
     const { stdout } = await execFileAsync(
@@ -107,13 +152,17 @@ if ($d.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 1 };
 }
 
 /** Open a native OS file/folder dialog and return the absolute path. */
-export async function browseNativePath(mode: BrowseMode): Promise<string> {
+export async function browseNativePath(
+  mode: BrowseMode,
+  options?: { defaultName?: string },
+): Promise<string> {
+  const defaultName = options?.defaultName;
   switch (process.platform) {
     case "darwin":
-      return browseDarwin(mode);
+      return browseDarwin(mode, defaultName);
     case "win32":
-      return browseWindows(mode);
+      return browseWindows(mode, defaultName);
     default:
-      return browseLinux(mode);
+      return browseLinux(mode, defaultName);
   }
 }

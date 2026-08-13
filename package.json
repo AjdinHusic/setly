@@ -1,6 +1,6 @@
 {
-  "name": "setly",
-  "version": "0.2.0",
+  "name": "@husic/setly",
+  "version": "0.3.0",
   "description": "Guided UI for describing and setting app configuration (JSON appsettings, .env, and more)",
   "type": "module",
   "bin": {

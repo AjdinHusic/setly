@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import {
+  browsePath,
   generateConfig,
+  listProviders,
   openConfig,
   saveDescribe,
   type DescribeConfig,
   type FieldMeta,
   type FieldType,
   type ProviderId,
+  type ProviderInfo,
 } from "../api";
 import type { AppOutletContext } from "../components/AppLayout";
 import { AddParameterForm } from "../components/AddParameterForm";
@@ -30,6 +33,18 @@ import {
 
 type Tab = "configure" | "describe" | "preview";
 
+function suggestedOutputName(
+  sourcePath: string,
+  sourceProviderId: ProviderId,
+  outputProviderId: ProviderId,
+): string {
+  const base = sourcePath.split(/[/\\]/).pop() ?? "config";
+  if (outputProviderId === sourceProviderId) return base;
+  if (outputProviderId === "dotenv") return ".env";
+  if (outputProviderId === "json") return "appsettings.json";
+  return base;
+}
+
 export function ConfigPage() {
   const [searchParams] = useSearchParams();
   const filePath = searchParams.get("path") ?? "";
@@ -42,6 +57,10 @@ export function ConfigPage() {
   const [describePath, setDescribePath] = useState<string | null>(null);
   const [providerId, setProviderId] = useState<ProviderId | null>(null);
   const [providerLabel, setProviderLabel] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [outputProviderId, setOutputProviderId] = useState<ProviderId | null>(
+    null,
+  );
   const [describe, setDescribe] = useState<DescribeConfig | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [stalePaths, setStalePaths] = useState<string[]>([]);
@@ -67,6 +86,22 @@ export function ConfigPage() {
     [targetPath],
   );
 
+  const activeOutputProviderId = outputProviderId ?? providerId;
+
+  useEffect(() => {
+    let cancelled = false;
+    listProviders()
+      .then((result) => {
+        if (!cancelled) setProviders(result.providers);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!filePath) {
       setLoading(false);
@@ -91,6 +126,7 @@ export function ConfigPage() {
         setDescribePath(result.describePath);
         setProviderId(result.providerId);
         setProviderLabel(result.providerLabel);
+        setOutputProviderId(result.providerId);
         setDescribe(result.describe);
         setValues(result.values);
         setStalePaths(result.stalePaths);
@@ -117,10 +153,19 @@ export function ConfigPage() {
   }, [filePath, refreshProjects]);
 
   useEffect(() => {
-    if (tab !== "preview" || !targetPath || !describe) return;
+    if (
+      tab !== "preview" ||
+      !targetPath ||
+      !describe ||
+      !activeOutputProviderId
+    ) {
+      return;
+    }
     let cancelled = false;
     setPreviewError(null);
-    generateConfig(targetPath, values, "preview")
+    generateConfig(targetPath, values, "preview", {
+      outputProviderId: activeOutputProviderId,
+    })
       .then((result) => {
         if (!cancelled) setPreview(result.text);
       })
@@ -133,7 +178,7 @@ export function ConfigPage() {
     return () => {
       cancelled = true;
     };
-  }, [tab, targetPath, values, describe]);
+  }, [tab, targetPath, values, describe, activeOutputProviderId]);
 
   function handleValueChange(pathKey: string, value: unknown) {
     setValues((prev) => ({ ...prev, [pathKey]: value }));
@@ -235,8 +280,8 @@ export function ConfigPage() {
     return Object.keys(next).length === 0;
   }
 
-  async function runGenerate(copy?: boolean) {
-    if (!targetPath) return;
+  async function runGenerate(action: "overwrite" | "copy" | "write") {
+    if (!targetPath || !providerId || !activeOutputProviderId) return;
     if (!validate()) {
       setTab("configure");
       setGenError("Fix required fields before generating.");
@@ -246,14 +291,38 @@ export function ConfigPage() {
     setGenError(null);
     setGenMessage(null);
     try {
-      const mode = copy ? "preview" : "overwrite";
-      const result = await generateConfig(targetPath, values, mode);
+      if (action === "write") {
+        const defaultName = suggestedOutputName(
+          targetPath,
+          providerId,
+          activeOutputProviderId,
+        );
+        const selected = await browsePath("save", { defaultName });
+        if (!selected) {
+          setGenMessage(null);
+          return;
+        }
+        const result = await generateConfig(targetPath, values, "write", {
+          outputProviderId: activeOutputProviderId,
+          outputPath: selected,
+        });
+        setPreview(result.text);
+        setGenMessage(`Wrote ${result.writtenPath ?? selected}`);
+        return;
+      }
+
+      const mode = action === "copy" ? "preview" : "overwrite";
+      const result = await generateConfig(targetPath, values, mode, {
+        outputProviderId: activeOutputProviderId,
+      });
       setPreview(result.text);
-      if (copy) {
+      if (action === "copy") {
         await navigator.clipboard.writeText(result.text);
-        setGenMessage("Copied config to clipboard.");
+        setGenMessage(
+          `Copied ${result.outputProviderId} output to clipboard.`,
+        );
       } else {
-        setGenMessage(`Wrote ${result.targetPath}`);
+        setGenMessage(`Wrote ${result.writtenPath ?? result.targetPath}`);
       }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err));
@@ -294,9 +363,14 @@ export function ConfigPage() {
     );
   }
 
-  if (!describe || !targetPath) return null;
+  if (!describe || !targetPath || !providerId || !activeOutputProviderId) {
+    return null;
+  }
 
   const fileName = targetPath.split(/[/\\]/).pop() ?? targetPath;
+  const outputLabel =
+    providers.find((p) => p.id === activeOutputProviderId)?.label ??
+    activeOutputProviderId;
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8 pb-16">
@@ -418,8 +492,9 @@ export function ConfigPage() {
           {tab === "preview" && (
             <div>
               <p className="mb-3 text-sm text-muted">
-                Live preview of the file that would be generated from the current
-                form values.
+                Live preview as{" "}
+                <span className="font-medium text-ink">{outputLabel}</span> from
+                the current form values.
               </p>
               {previewError && (
                 <p className="mb-3 text-sm text-danger">{previewError}</p>
@@ -439,8 +514,13 @@ export function ConfigPage() {
 
         <GenerateActions
           busy={genBusy}
-          onOverwrite={() => runGenerate(false)}
-          onCopy={() => runGenerate(true)}
+          providers={providers}
+          sourceProviderId={providerId}
+          outputProviderId={activeOutputProviderId}
+          onOutputProviderChange={setOutputProviderId}
+          onOverwrite={() => runGenerate("overwrite")}
+          onCopy={() => runGenerate("copy")}
+          onWriteFile={() => runGenerate("write")}
           message={genMessage}
           error={genError}
           targetLabel={fileName}

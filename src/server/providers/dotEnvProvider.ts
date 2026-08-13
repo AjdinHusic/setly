@@ -1,5 +1,9 @@
 import type { ConfigProvider } from "./types.js";
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Parse KEY=VALUE .env content into a flat string record */
 export function parseDotEnv(raw: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -26,12 +30,54 @@ export function parseDotEnv(raw: string): Record<string, unknown> {
   return result;
 }
 
-export function serializeDotEnv(data: unknown): string {
-  if (typeof data !== "object" || data === null || Array.isArray(data)) {
-    throw new Error(".env root must be a flat object");
+/**
+ * Flatten nested config (e.g. appsettings) into env-style keys.
+ * Nesting uses `__` (ASP.NET Core convention): Host.Name → Host__Name.
+ */
+export function flattenToEnvRecord(
+  data: unknown,
+): Record<string, unknown> {
+  if (!isPlainObject(data)) {
+    throw new Error(".env root must be an object");
   }
+
+  const out: Record<string, unknown> = {};
+
+  function walk(node: unknown, parts: string[]) {
+    if (isPlainObject(node)) {
+      const entries = Object.entries(node);
+      if (entries.length === 0) {
+        if (parts.length > 0) out[parts.join("__")] = "";
+        return;
+      }
+      for (const [key, value] of entries) {
+        walk(value, [...parts, key]);
+      }
+      return;
+    }
+
+    if (parts.length === 0) {
+      throw new Error(".env root must be a flat or nested object of values");
+    }
+
+    const key = parts.join("__");
+    if (node === undefined || node === null) {
+      out[key] = "";
+    } else if (typeof node === "object") {
+      out[key] = JSON.stringify(node);
+    } else {
+      out[key] = node;
+    }
+  }
+
+  walk(data, []);
+  return out;
+}
+
+export function serializeDotEnv(data: unknown): string {
+  const flat = flattenToEnvRecord(data);
   const lines: string[] = [];
-  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(flat)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
     const raw =
       value === undefined || value === null
@@ -73,5 +119,9 @@ export const dotEnvProvider: ConfigProvider = {
     // .env.local -> describe-config.env.local.json
     if (targetFileName === ".env") return "describe-config.env.json";
     return `describe-config${targetFileName}.json`;
+  },
+
+  suggestedFileName(_sourceFileName: string): string {
+    return ".env";
   },
 };
