@@ -62,3 +62,17 @@ Sibling files next to each config, e.g.:
 - `.env` → `describe-config.env.json`
 
 Supported field types: `string`, `number`, `boolean`, `json`.
+
+## Publishing to npm
+
+Releases are published by [`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml) when you publish a GitHub Release (or run the workflow manually).
+
+Required secret in the repo (**Settings → Secrets and variables → Actions**):
+
+- `NPM_TOKEN` — npm automation/access token with permission to publish the `setly` package
+
+Suggested release flow:
+
+1. Bump `"version"` in `package.json` (and commit).
+2. Create a GitHub Release / tag such as `v0.1.0`.
+3. The workflow builds and runs `npm publish --access public --provenance`.
