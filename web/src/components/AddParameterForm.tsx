@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
-import type { FieldType } from "../api";
+import type { DropdownOption, FieldType } from "../api";
 
-const TYPES: FieldType[] = ["string", "number", "boolean", "json"];
+const TYPES: FieldType[] = ["string", "number", "boolean", "json", "dropdown"];
 
 interface AddParameterFormProps {
   busy: boolean;
@@ -12,6 +12,7 @@ interface AddParameterFormProps {
     description: string;
     required: boolean;
     initialValue: unknown;
+    options?: DropdownOption[];
   }) => Promise<void> | void;
   defaultValueForType: (type: FieldType) => unknown;
 }
@@ -27,6 +28,10 @@ export function AddParameterForm({
   const [description, setDescription] = useState("");
   const [required, setRequired] = useState(false);
   const [initialRaw, setInitialRaw] = useState("");
+  const [options, setOptions] = useState<DropdownOption[]>([
+    { Label: "LOCAL", Value: "localhost:5174" },
+    { Label: "PROD", Value: "api.example.com" },
+  ]);
   const [error, setError] = useState<string | null>(null);
 
   const placeholderDefault = useMemo(
@@ -39,7 +44,15 @@ export function AddParameterForm({
     setError(null);
     try {
       let initialValue: unknown = defaultValueForType(type);
-      if (initialRaw.trim() !== "") {
+      if (type === "dropdown") {
+        if (options.length === 0) {
+          throw new Error("Add at least one dropdown option");
+        }
+        initialValue =
+          initialRaw.trim() !== ""
+            ? initialRaw
+            : (options[0]?.Value ?? "");
+      } else if (initialRaw.trim() !== "") {
         if (type === "number") {
           const n = Number(initialRaw);
           if (Number.isNaN(n)) throw new Error("Initial value must be a number");
@@ -62,6 +75,7 @@ export function AddParameterForm({
         description,
         required,
         initialValue,
+        options: type === "dropdown" ? options : undefined,
       });
       setPath("");
       setLabel("");
@@ -69,6 +83,10 @@ export function AddParameterForm({
       setRequired(false);
       setInitialRaw("");
       setType("string");
+      setOptions([
+        { Label: "LOCAL", Value: "localhost:5174" },
+        { Label: "PROD", Value: "api.example.com" },
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -139,18 +157,96 @@ export function AddParameterForm({
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
-        <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-initial">
-            Default (InitialValue)
-          </label>
-          <input
-            id="add-initial"
-            className="input font-mono text-[13px]"
-            value={initialRaw}
-            onChange={(e) => setInitialRaw(e.target.value)}
-            placeholder={placeholderDefault || "(type default)"}
-          />
-        </div>
+        {type === "dropdown" ? (
+          <div className="sm:col-span-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted">Options</span>
+              <button
+                type="button"
+                className="btn-ghost text-[11px]"
+                onClick={() =>
+                  setOptions((prev) => [
+                    ...prev,
+                    { Label: "OPTION", Value: "" },
+                  ])
+                }
+              >
+                Add option
+              </button>
+            </div>
+            {options.map((opt, index) => (
+              <div key={index} className="flex flex-wrap items-center gap-2">
+                <input
+                  className="input max-w-[8rem] font-mono text-[12px]"
+                  value={opt.Label}
+                  placeholder="LOCAL"
+                  onChange={(e) =>
+                    setOptions((prev) =>
+                      prev.map((row, i) =>
+                        i === index ? { ...row, Label: e.target.value } : row,
+                      ),
+                    )
+                  }
+                />
+                <span className="text-xs text-muted">→</span>
+                <input
+                  className="input min-w-0 flex-1 font-mono text-[12px]"
+                  value={opt.Value}
+                  placeholder="value"
+                  onChange={(e) =>
+                    setOptions((prev) =>
+                      prev.map((row, i) =>
+                        i === index ? { ...row, Value: e.target.value } : row,
+                      ),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn-ghost text-[11px] text-danger"
+                  onClick={() =>
+                    setOptions((prev) => prev.filter((_, i) => i !== index))
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-muted"
+                htmlFor="add-initial"
+              >
+                Default value
+              </label>
+              <select
+                id="add-initial"
+                className="input max-w-md"
+                value={initialRaw || options[0]?.Value || ""}
+                onChange={(e) => setInitialRaw(e.target.value)}
+              >
+                {options.map((opt) => (
+                  <option key={`${opt.Label}:${opt.Value}`} value={opt.Value}>
+                    [{opt.Label}] {opt.Value}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-initial">
+              Default (InitialValue)
+            </label>
+            <input
+              id="add-initial"
+              className="input font-mono text-[13px]"
+              value={initialRaw}
+              onChange={(e) => setInitialRaw(e.target.value)}
+              placeholder={placeholderDefault || "(type default)"}
+            />
+          </div>
+        )}
       </div>
 
       <label className="mt-3 inline-flex items-center gap-2 text-sm text-ink">

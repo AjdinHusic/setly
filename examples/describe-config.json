@@ -5,16 +5,191 @@
             "Name": {
                 "InitialValue": "My-App",
                 "Type": "string",
-                "Description": "The name of the host",
+                "Description": "Display name for this host / service instance.",
                 "Label": "Host Name",
                 "Required": true
             },
             "Port": {
                 "InitialValue": 8000,
                 "Type": "number",
-                "Description": "The port of the host",
+                "Description": "HTTP listen port.",
                 "Label": "Host Port",
                 "Required": true
+            },
+      "PublicUrl": {
+        "InitialValue": "http://localhost:5174",
+        "Type": "dropdown",
+        "Description": "Public base URL used in redirects and emails.",
+        "Label": "Public URL",
+        "Required": true,
+        "Options": [
+          {
+            "Label": "LOCAL",
+            "Value": "http://localhost:5174"
+          },
+          {
+            "Label": "STAGE",
+            "Value": "https://staging-api.example.com"
+          },
+          {
+            "Label": "PROD",
+            "Value": "https://api.example.com"
+          }
+        ]
+      }
+        },
+        "Database": {
+            "Connection": {
+                "Server": {
+                    "InitialValue": "localhost",
+                    "Type": "string",
+                    "Description": "Database hostname or IP.",
+                    "Label": "Server",
+                    "Required": true
+                },
+                "Port": {
+                    "InitialValue": 5432,
+                    "Type": "number",
+                    "Description": "Database port.",
+                    "Label": "Port",
+                    "Required": true
+                },
+                "Name": {
+                    "InitialValue": "setly_demo",
+                    "Type": "string",
+                    "Description": "Database / catalog name.",
+                    "Label": "Database Name",
+                    "Required": true
+                },
+                "User": {
+                    "InitialValue": "app",
+                    "Type": "string",
+                    "Description": "Login user.",
+                    "Label": "User",
+                    "Required": true
+                },
+                "Ssl": {
+                    "InitialValue": true,
+                    "Type": "boolean",
+                    "Description": "Require TLS to the database.",
+                    "Label": "Use SSL",
+                    "Required": false
+                }
+            },
+            "Pool": {
+                "Min": {
+                    "InitialValue": 2,
+                    "Type": "number",
+                    "Description": "Minimum pooled connections.",
+                    "Label": "Pool Min",
+                    "Required": false
+                },
+                "Max": {
+                    "InitialValue": 20,
+                    "Type": "number",
+                    "Description": "Maximum pooled connections.",
+                    "Label": "Pool Max",
+                    "Required": false
+                },
+                "IdleTimeoutSeconds": {
+                    "InitialValue": 60,
+                    "Type": "number",
+                    "Description": "Close idle connections after this many seconds.",
+                    "Label": "Idle Timeout (s)",
+                    "Required": false
+                }
+            }
+        },
+        "Logging": {
+            "Level": {
+                "InitialValue": "Information",
+                "Type": "string",
+                "Description": "Minimum log level (Trace, Debug, Information, Warning, Error).",
+                "Label": "Log Level",
+                "Required": true
+            },
+            "Console": {
+                "Enabled": {
+                    "InitialValue": true,
+                    "Type": "boolean",
+                    "Description": "Write logs to stdout.",
+                    "Label": "Console Logging",
+                    "Required": false
+                },
+                "IncludeScopes": {
+                    "InitialValue": false,
+                    "Type": "boolean",
+                    "Description": "Include logging scopes in console output.",
+                    "Label": "Include Scopes",
+                    "Required": false
+                }
+            },
+            "File": {
+                "Enabled": {
+                    "InitialValue": false,
+                    "Type": "boolean",
+                    "Description": "Write logs to a rolling file.",
+                    "Label": "File Logging",
+                    "Required": false
+                },
+                "Path": {
+                    "InitialValue": "logs/app.log",
+                    "Type": "string",
+                    "Description": "Relative or absolute log file path.",
+                    "Label": "Log File Path",
+                    "Required": false
+                }
+            }
+        },
+        "Features": {
+            "EnableBetaUi": {
+                "InitialValue": false,
+                "Type": "boolean",
+                "Description": "Turn on experimental UI surfaces.",
+                "Label": "Beta UI",
+                "Required": false
+            },
+            "MaxUploadMb": {
+                "InitialValue": 25,
+                "Type": "number",
+                "Description": "Max upload size in megabytes.",
+                "Label": "Max Upload (MB)",
+                "Required": false
+            },
+            "AllowedOrigins": {
+                "InitialValue": [
+                    "http://localhost:5173",
+                    "https://app.example.local"
+                ],
+                "Type": "json",
+                "Description": "CORS allow-list as a JSON array of origins.",
+                "Label": "Allowed Origins",
+                "Required": false
+            }
+        },
+        "Security": {
+            "ApiKey": {
+                "InitialValue": "",
+                "Type": "string",
+                "Description": "Server API key. Leave empty until you set a real secret.",
+                "Label": "API Key",
+                "Required": true
+            },
+            "Session": {
+                "CookieName": {
+                    "InitialValue": "setly.sid",
+                    "Type": "string",
+                    "Description": "Session cookie name.",
+                    "Label": "Cookie Name",
+                    "Required": false
+                },
+                "TtlMinutes": {
+                    "InitialValue": 120,
+                    "Type": "number",
+                    "Description": "Session lifetime in minutes.",
+                    "Label": "Session TTL (min)",
+                    "Required": false
+                }
             }
         }
     }

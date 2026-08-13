@@ -312,6 +312,101 @@ export function fieldDomId(pathKey: string): string {
   return `cfg-${pathKey.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
+export function sectionDomId(pathKey: string): string {
+  return `sec-${pathKey.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+export type OutlineEntry =
+  | {
+      kind: "section";
+      path: string[];
+      pathKey: string;
+      label: string;
+      children: OutlineEntry[];
+    }
+  | {
+      kind: "field";
+      path: string[];
+      pathKey: string;
+      label: string;
+    };
+
+/** Build a nested outline of sections and leaf fields from describe Parameters. */
+export function buildOutline(
+  parameters: Record<string, ParameterNode>,
+  prefix: string[] = [],
+): OutlineEntry[] {
+  const entries: OutlineEntry[] = [];
+  for (const [key, node] of Object.entries(parameters)) {
+    const path = [...prefix, key];
+    const pathKey = path.join(".");
+    if (isFieldMeta(node)) {
+      entries.push({
+        kind: "field",
+        path,
+        pathKey,
+        label: node.Label || key,
+      });
+    } else {
+      entries.push({
+        kind: "section",
+        path,
+        pathKey,
+        label: key,
+        children: buildOutline(
+          node as Record<string, ParameterNode>,
+          path,
+        ),
+      });
+    }
+  }
+  return entries;
+}
+
+export function getScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/** Scroll the main pane (not the outline) to a field or section. */
+export function scrollToConfigTarget(
+  pathKey: string,
+  kind: "field" | "section",
+) {
+  const id =
+    kind === "field"
+      ? `field-${fieldDomId(pathKey)}`
+      : `section-${sectionDomId(pathKey)}`;
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const scrollRoot = getScrollParent(el);
+  const offset = 20;
+  if (scrollRoot) {
+    const rootRect = scrollRoot.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const nextTop =
+      scrollRoot.scrollTop + (elRect.top - rootRect.top) - offset;
+    scrollRoot.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
+  } else {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (kind === "field") {
+    const input = document.getElementById(fieldDomId(pathKey));
+    if (input instanceof HTMLElement) {
+      window.setTimeout(() => input.focus({ preventScroll: true }), 280);
+    }
+  }
+}
+
 export function valuesEqual(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a === "object" || typeof b === "object") {
@@ -404,6 +499,8 @@ export function defaultValueForType(type: FieldType): unknown {
       return false;
     case "json":
       return {};
+    case "dropdown":
+    case "string":
     default:
       return "";
   }

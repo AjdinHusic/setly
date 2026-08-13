@@ -32,73 +32,69 @@ export function GenerateActions({
     providers.find((p) => p.id === outputProviderId)?.label ?? outputProviderId;
 
   return (
-    <section className="rounded-xl border border-line bg-panel p-5 shadow-sm">
-      <h2 className="mb-3 text-sm font-semibold text-ink">Generate</h2>
+    <section className="rounded-xl border border-line bg-panel/95 p-3 shadow-[0_-8px_30px_rgba(15,23,32,0.08)] backdrop-blur">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+            Generate
+          </span>
+          <label className="sr-only" htmlFor="output-provider">
+            Output format
+          </label>
+          <select
+            id="output-provider"
+            className="input max-w-[14rem] py-1.5 text-sm"
+            value={outputProviderId}
+            disabled={busy || providers.length === 0}
+            onChange={(e) =>
+              onOutputProviderChange(e.target.value as ProviderId)
+            }
+          >
+            {providers.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.label}
+                {provider.id === sourceProviderId ? " (native)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="mb-4">
-        <label
-          className="mb-1.5 block text-xs font-medium text-muted"
-          htmlFor="output-provider"
-        >
-          Output format
-        </label>
-        <select
-          id="output-provider"
-          className="input max-w-xs text-sm"
-          value={outputProviderId}
-          disabled={busy || providers.length === 0}
-          onChange={(e) =>
-            onOutputProviderChange(e.target.value as ProviderId)
-          }
-        >
-          {providers.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.label}
-              {provider.id === sourceProviderId ? " (native)" : ""}
-              {` — ${provider.patterns.join(", ")}`}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1.5 text-xs text-muted">
-          Export values as JSON or DotEnv (and more later). Nested JSON keys
-          become <code className="font-mono">Section__Key</code> in .env.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          className="btn-secondary"
-          type="button"
-          disabled={busy}
-          onClick={onCopy}
-        >
-          Copy {outputLabel} to clipboard
-        </button>
-        <button
-          className="btn-secondary"
-          type="button"
-          disabled={busy}
-          onClick={onWriteFile}
-        >
-          Write to file…
-        </button>
-        {isNativeOutput && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            className="btn-primary"
+            className="btn-secondary"
             type="button"
             disabled={busy}
-            onClick={onOverwrite}
+            onClick={onCopy}
           >
-            Overwrite {targetLabel}
+            Copy {outputLabel}
           </button>
-        )}
+          <button
+            className="btn-secondary"
+            type="button"
+            disabled={busy}
+            onClick={onWriteFile}
+          >
+            Write to file…
+          </button>
+          {isNativeOutput && (
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={busy}
+              onClick={onOverwrite}
+            >
+              Overwrite {targetLabel}
+            </button>
+          )}
+        </div>
       </div>
-      <p className="mt-2 text-xs text-muted">
-        Preview follows the selected output format. Write to file opens a save
-        dialog; overwrite only updates the opened file in its native format.
-      </p>
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-      {message && <p className="mt-3 text-sm text-accent">{message}</p>}
+      {(error || message) && (
+        <p
+          className={`mt-2 text-sm ${error ? "text-danger" : "text-accent"}`}
+        >
+          {error ?? message}
+        </p>
+      )}
     </section>
   );
 }

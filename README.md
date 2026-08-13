@@ -92,7 +92,8 @@ Sibling files next to each config, e.g.:
 - `appsettings.Development.json` → `describe-config.appsettings.Development.json`
 - `.env` → `describe-config.env.json`
 
-Supported field types: `string`, `number`, `boolean`, `json`.
+Supported field types: `string`, `number`, `boolean`, `json`, `dropdown` (with
+`Options: [{ Label, Value }, …]` for quick environment presets).
 
 ## Publishing to npm
 

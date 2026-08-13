@@ -244,6 +244,9 @@ export function coerceValue(value: unknown, type: FieldType): unknown {
     }
     return value;
   }
+  if (type === "dropdown" || type === "string") {
+    return value === undefined || value === null ? "" : String(value);
+  }
   return value === undefined || value === null ? "" : String(value);
 }
 

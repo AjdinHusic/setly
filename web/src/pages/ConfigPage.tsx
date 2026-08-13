@@ -7,6 +7,7 @@ import {
   openConfig,
   saveDescribe,
   type DescribeConfig,
+  type DropdownOption,
   type FieldMeta,
   type FieldType,
   type ProviderId,
@@ -15,11 +16,12 @@ import {
 import type { AppOutletContext } from "../components/AppLayout";
 import { AddParameterForm } from "../components/AddParameterForm";
 import { ConfigForm } from "../components/ConfigForm";
-import { PathInfo } from "../components/FilePicker";
+import { ConfigOutlineNav } from "../components/ConfigOutlineNav";
 import { GenerateActions } from "../components/GenerateActions";
 import { MetaEditor } from "../components/MetaEditor";
-import { MissingFieldsBar } from "../components/MissingFieldsBar";
+import { PathsInfoButton } from "../components/PathsInfoButton";
 import {
+  buildOutline,
   defaultValueForType,
   defaultsFromDescribe,
   findProjectForConfigPath,
@@ -81,6 +83,11 @@ export function ConfigPage() {
     return flattenParameters(describe.Parameters, [], new Set(stalePaths));
   }, [describe, stalePaths]);
 
+  const outline = useMemo(() => {
+    if (!describe) return [];
+    return buildOutline(describe.Parameters);
+  }, [describe]);
+
   const parentProject = useMemo(
     () => (targetPath ? findProjectForConfigPath(targetPath) : null),
     [targetPath],
@@ -131,11 +138,11 @@ export function ConfigPage() {
         setValues(result.values);
         setStalePaths(result.stalePaths);
         refreshProjects();
-        setInfo(
-          result.createdDescribe
-            ? `Created describe metadata for ${result.providerLabel}.`
-            : `Loaded existing describe metadata (${result.providerLabel}).`,
-        );
+        if (result.createdDescribe) {
+          console.info(
+            `[setly] Created describe metadata for ${result.providerLabel}: ${result.describePath}`,
+          );
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -235,6 +242,7 @@ export function ConfigPage() {
     description: string;
     required: boolean;
     initialValue: unknown;
+    options?: DropdownOption[];
   }) {
     if (!describe || !targetPath) return;
     const path = parseParameterPath(input.path);
@@ -245,6 +253,9 @@ export function ConfigPage() {
       Description: input.description,
       Label: input.label.trim() || leafKey,
       Required: input.required,
+      ...(input.type === "dropdown"
+        ? { Options: input.options ?? [] }
+        : {}),
     };
     const nextDescribe: DescribeConfig = {
       ...describe,
@@ -373,14 +384,20 @@ export function ConfigPage() {
     activeOutputProviderId;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8 pb-16">
-      <header className="mb-6">
+    <div className="relative mx-auto max-w-6xl px-6 pt-8 pb-36">
+      <header className="mb-6 max-w-3xl">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
           Configuration
         </p>
-        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
-          {fileName}
-        </h2>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">
+            {fileName}
+          </h2>
+          <PathsInfoButton
+            targetPath={targetPath}
+            describePath={describePath}
+          />
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {providerLabel && (
             <span className="rounded-md bg-panel-2 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -399,132 +416,141 @@ export function ConfigPage() {
         </div>
       </header>
 
-      <div className="space-y-4">
-        {error && (
-          <p className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">
-            {error}
-          </p>
-        )}
-        {info && !error && (
-          <p className="rounded-lg border border-accent/20 bg-accent-soft px-3 py-2 text-sm text-accent">
-            {info}
-          </p>
-        )}
+      <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
+        <div className="min-w-0 max-w-3xl flex-1 space-y-4">
+          {error && (
+            <p className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">
+              {error}
+            </p>
+          )}
+          {info && !error && (
+            <p className="rounded-lg border border-accent/20 bg-accent-soft px-3 py-2 text-sm text-accent">
+              {info}
+            </p>
+          )}
 
-        <PathInfo targetPath={targetPath} describePath={describePath} />
+          <section className="rounded-xl border border-line bg-panel p-5 shadow-sm">
+            <div className="mb-4 flex gap-1 border-b border-line">
+              {(
+                [
+                  ["configure", "Configure"],
+                  ["describe", "Describe"],
+                  ["preview", "Preview"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
+                    tab === id
+                      ? "border-accent text-ink"
+                      : "border-transparent text-muted hover:text-ink"
+                  }`}
+                  onClick={() => setTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {tab === "configure" && (
+              <>
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted">
+                    Defaults come from describe-config InitialValue. Sections
+                    group related keys.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleResetAll}
+                  >
+                    Reset all to defaults
+                  </button>
+                </div>
+                <ConfigForm
+                  parameters={describe.Parameters}
+                  fields={fields}
+                  values={values}
+                  errors={fieldErrors}
+                  onChange={handleValueChange}
+                  onResetField={handleResetField}
+                  highlightPathKey={highlightPathKey}
+                />
+              </>
+            )}
+
+            {tab === "describe" && (
+              <div className="space-y-6">
+                <AddParameterForm
+                  onAdd={handleAddParameter}
+                  busy={savingMeta}
+                  defaultValueForType={defaultValueForType}
+                />
+                <MetaEditor
+                  fields={fields}
+                  onChange={handleMetaChange}
+                  onSave={handleSaveDescribe}
+                  saving={savingMeta}
+                />
+              </div>
+            )}
+
+            {tab === "preview" && (
+              <div>
+                <p className="mb-3 text-sm text-muted">
+                  Live preview as{" "}
+                  <span className="font-medium text-ink">{outputLabel}</span>{" "}
+                  from the current form values.
+                </p>
+                {previewError && (
+                  <p className="mb-3 text-sm text-danger">{previewError}</p>
+                )}
+                {preview !== null ? (
+                  <pre className="max-h-[28rem] overflow-auto rounded-lg border border-line bg-panel-2 p-3 font-mono text-xs leading-relaxed text-ink">
+                    {preview}
+                  </pre>
+                ) : (
+                  !previewError && (
+                    <p className="text-sm text-muted">Building preview…</p>
+                  )
+                )}
+              </div>
+            )}
+          </section>
+        </div>
 
         {tab === "configure" && (
-          <MissingFieldsBar
-            fields={fields}
-            values={values}
-            onGoToNext={(pathKey) => {
-              setHighlightPathKey(pathKey);
-              setTab("configure");
-            }}
-          />
+          <aside className="w-full shrink-0 md:sticky md:top-4 md:w-56 xl:w-64">
+            <ConfigOutlineNav
+              outline={outline}
+              fields={fields}
+              values={values}
+              onNavigate={(pathKey) => {
+                setHighlightPathKey(pathKey);
+                setTab("configure");
+              }}
+            />
+          </aside>
         )}
+      </div>
 
-        <section className="rounded-xl border border-line bg-panel p-5 shadow-sm">
-          <div className="mb-4 flex gap-1 border-b border-line">
-            {(
-              [
-                ["configure", "Configure"],
-                ["describe", "Describe"],
-                ["preview", "Preview"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
-                  tab === id
-                    ? "border-accent text-ink"
-                    : "border-transparent text-muted hover:text-ink"
-                }`}
-                onClick={() => setTab(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {tab === "configure" && (
-            <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted">
-                  Defaults come from describe-config InitialValue.
-                </p>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleResetAll}
-                >
-                  Reset all to defaults
-                </button>
-              </div>
-              <ConfigForm
-                fields={fields}
-                values={values}
-                errors={fieldErrors}
-                onChange={handleValueChange}
-                onResetField={handleResetField}
-                highlightPathKey={highlightPathKey}
-              />
-            </>
-          )}
-
-          {tab === "describe" && (
-            <div className="space-y-6">
-              <AddParameterForm
-                onAdd={handleAddParameter}
-                busy={savingMeta}
-                defaultValueForType={defaultValueForType}
-              />
-              <MetaEditor
-                fields={fields}
-                onChange={handleMetaChange}
-                onSave={handleSaveDescribe}
-                saving={savingMeta}
-              />
-            </div>
-          )}
-
-          {tab === "preview" && (
-            <div>
-              <p className="mb-3 text-sm text-muted">
-                Live preview as{" "}
-                <span className="font-medium text-ink">{outputLabel}</span> from
-                the current form values.
-              </p>
-              {previewError && (
-                <p className="mb-3 text-sm text-danger">{previewError}</p>
-              )}
-              {preview !== null ? (
-                <pre className="max-h-[28rem] overflow-auto rounded-lg border border-line bg-panel-2 p-3 font-mono text-xs leading-relaxed text-ink">
-                  {preview}
-                </pre>
-              ) : (
-                !previewError && (
-                  <p className="text-sm text-muted">Building preview…</p>
-                )
-              )}
-            </div>
-          )}
-        </section>
-
-        <GenerateActions
-          busy={genBusy}
-          providers={providers}
-          sourceProviderId={providerId}
-          outputProviderId={activeOutputProviderId}
-          onOutputProviderChange={setOutputProviderId}
-          onOverwrite={() => runGenerate("overwrite")}
-          onCopy={() => runGenerate("copy")}
-          onWriteFile={() => runGenerate("write")}
-          message={genMessage}
-          error={genError}
-          targetLabel={fileName}
-        />
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 md:left-72">
+        <div className="pointer-events-auto mx-auto max-w-6xl px-6 pb-4 pt-2">
+          <GenerateActions
+            busy={genBusy}
+            providers={providers}
+            sourceProviderId={providerId}
+            outputProviderId={activeOutputProviderId}
+            onOutputProviderChange={setOutputProviderId}
+            onOverwrite={() => runGenerate("overwrite")}
+            onCopy={() => runGenerate("copy")}
+            onWriteFile={() => runGenerate("write")}
+            message={genMessage}
+            error={genError}
+            targetLabel={fileName}
+          />
+        </div>
       </div>
     </div>
   );
