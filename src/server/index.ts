@@ -15,10 +15,18 @@ import {
 } from "./configIo.js";
 import {
   buildAppsettingsFromValues,
+  describeHasFlatSeparatorKeys,
+  expandFlatDescribeParameters,
   generateDescribe,
   mergeDescribe,
   valuesFromAppsettings,
 } from "./describe.js";
+import {
+  DEFAULT_ENV_SEPARATOR,
+  detectEnvSeparator,
+  unflattenEnvRecord,
+  type KeyCasing,
+} from "./nesting.js";
 import { listProviderInfo, getProvider, providerForPath } from "./providers/index.js";
 import type { ProviderId } from "./providers/types.js";
 import type { DescribeConfig } from "./types.js";
@@ -105,18 +113,57 @@ export function createApp(options?: { staticDir?: string }) {
 
       const provider = providerForPath(targetPath);
       const raw = await readTextFile(targetPath);
-      const configData = provider.parse(raw);
+      const parsed = provider.parse(raw);
       const targetFileName = path.basename(targetPath);
       const describePath = describePathFor(
         targetPath,
         provider.describeSiblingName(targetFileName),
       );
 
+      let flatSource = parsed;
+      let configData: Record<string, unknown> = parsed;
       let describe: DescribeConfig;
       let createdDescribe = false;
       let stalePaths: string[] = [];
 
-      if (await pathExists(describePath)) {
+      if (provider.id === "dotenv") {
+        flatSource = parsed;
+        const existingExists = await pathExists(describePath);
+        const existing = existingExists
+          ? await readJsonFile<DescribeConfig>(describePath)
+          : null;
+        const separator =
+          existing?.Separator ??
+          detectEnvSeparator(flatSource) ??
+          DEFAULT_ENV_SEPARATOR;
+        configData = unflattenEnvRecord(flatSource, separator);
+
+        if (existing) {
+          let base: DescribeConfig = {
+            ...existing,
+            Separator: separator,
+            Parameters: describeHasFlatSeparatorKeys(
+              existing.Parameters,
+              separator,
+            )
+              ? expandFlatDescribeParameters(existing.Parameters, separator)
+              : existing.Parameters,
+          };
+          const merged = mergeDescribe(base, configData, targetFileName);
+          describe = {
+            ...merged.describe,
+            Separator: separator,
+          };
+          stalePaths = merged.stalePaths;
+          await writeJsonFile(describePath, describe);
+        } else {
+          describe = generateDescribe(configData, targetFileName, {
+            separator,
+          });
+          await writeJsonFile(describePath, describe);
+          createdDescribe = true;
+        }
+      } else if (await pathExists(describePath)) {
         const existing = await readJsonFile<DescribeConfig>(describePath);
         const merged = mergeDescribe(existing, configData, targetFileName);
         describe = merged.describe;
@@ -136,6 +183,7 @@ export function createApp(options?: { staticDir?: string }) {
         providerId: provider.id,
         providerLabel: provider.label,
         configData,
+        flatSource: provider.id === "dotenv" ? flatSource : undefined,
         describe,
         values,
         createdDescribe,
@@ -184,6 +232,8 @@ export function createApp(options?: { staticDir?: string }) {
         mode,
         outputProviderId,
         outputPath: outputPathInput,
+        separator: separatorInput,
+        casing: casingInput,
       } = req.body ?? {};
       if (typeof targetPathInput !== "string" || !targetPathInput.trim()) {
         res.status(400).json({ error: "path is required" });
@@ -227,7 +277,25 @@ export function createApp(options?: { staticDir?: string }) {
         describe,
         values as Record<string, unknown>,
       );
-      const text = outputProvider.serialize(configData);
+
+      const casing: KeyCasing =
+        casingInput === "camelCase" ||
+        casingInput === "PascalCase" ||
+        casingInput === "UPPERCASE" ||
+        casingInput === "lowercase" ||
+        casingInput === "preserve"
+          ? casingInput
+          : "preserve";
+
+      const separator =
+        typeof separatorInput === "string" && separatorInput.length > 0
+          ? separatorInput
+          : (describe.Separator ?? DEFAULT_ENV_SEPARATOR);
+
+      const text = outputProvider.serialize(configData, {
+        separator,
+        casing,
+      });
 
       let writtenPath: string | null = null;
       if (generateMode === "overwrite") {

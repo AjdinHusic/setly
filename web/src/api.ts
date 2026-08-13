@@ -1,6 +1,9 @@
 export type FieldType = "string" | "number" | "boolean" | "json" | "dropdown";
 export type ProviderId = "json" | "dotenv";
 
+export type { KeyCasing } from "./nesting";
+import type { KeyCasing } from "./nesting";
+
 export interface DropdownOption {
   Label: string;
   Value: string;
@@ -21,6 +24,11 @@ export type ParameterNode = FieldMeta | { [key: string]: ParameterNode };
 export interface DescribeConfig {
   TargetFile: string;
   Parameters: Record<string, ParameterNode>;
+  /**
+   * Nesting separator for flat key formats (dotenv).
+   * Example: "_" turns HOST_NAME into Host → Name sections.
+   */
+  Separator?: string;
 }
 
 export interface ProviderInfo {
@@ -49,6 +57,8 @@ export interface OpenResponse {
   providerId: ProviderId;
   providerLabel: string;
   configData: unknown;
+  /** Original flat KEY=VALUE map when provider is dotenv. */
+  flatSource?: Record<string, unknown>;
   describe: DescribeConfig;
   values: Record<string, unknown>;
   createdDescribe: boolean;
@@ -149,6 +159,8 @@ export function generateConfig(
   options?: {
     outputProviderId?: ProviderId;
     outputPath?: string;
+    separator?: string;
+    casing?: KeyCasing;
   },
 ) {
   return request<{
@@ -168,6 +180,8 @@ export function generateConfig(
       mode,
       outputProviderId: options?.outputProviderId,
       outputPath: options?.outputPath,
+      separator: options?.separator,
+      casing: options?.casing,
     }),
   });
 }

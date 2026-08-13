@@ -1,8 +1,10 @@
-import type { ConfigProvider } from "./types.js";
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import type { ConfigProvider, SerializeOptions } from "./types.js";
+import {
+  DEFAULT_ENV_SEPARATOR,
+  applyObjectKeyCasing,
+  flattenToEnvRecord,
+  isValidEnvKey,
+} from "../nesting.js";
 
 /** Parse KEY=VALUE .env content into a flat string record */
 export function parseDotEnv(raw: string): Record<string, unknown> {
@@ -17,7 +19,7 @@ export function parseDotEnv(raw: string): Record<string, unknown> {
     const eq = exportPrefix.indexOf("=");
     if (eq <= 0) continue;
     const key = exportPrefix.slice(0, eq).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    if (!isValidEnvKey(key)) continue;
     let value = exportPrefix.slice(eq + 1).trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
@@ -30,55 +32,14 @@ export function parseDotEnv(raw: string): Record<string, unknown> {
   return result;
 }
 
-/**
- * Flatten nested config (e.g. appsettings) into env-style keys.
- * Nesting uses `__` (ASP.NET Core convention): Host.Name → Host__Name.
- */
-export function flattenToEnvRecord(
+export function serializeDotEnv(
   data: unknown,
-): Record<string, unknown> {
-  if (!isPlainObject(data)) {
-    throw new Error(".env root must be an object");
-  }
-
-  const out: Record<string, unknown> = {};
-
-  function walk(node: unknown, parts: string[]) {
-    if (isPlainObject(node)) {
-      const entries = Object.entries(node);
-      if (entries.length === 0) {
-        if (parts.length > 0) out[parts.join("__")] = "";
-        return;
-      }
-      for (const [key, value] of entries) {
-        walk(value, [...parts, key]);
-      }
-      return;
-    }
-
-    if (parts.length === 0) {
-      throw new Error(".env root must be a flat or nested object of values");
-    }
-
-    const key = parts.join("__");
-    if (node === undefined || node === null) {
-      out[key] = "";
-    } else if (typeof node === "object") {
-      out[key] = JSON.stringify(node);
-    } else {
-      out[key] = node;
-    }
-  }
-
-  walk(data, []);
-  return out;
-}
-
-export function serializeDotEnv(data: unknown): string {
-  const flat = flattenToEnvRecord(data);
+  separator: string = DEFAULT_ENV_SEPARATOR,
+): string {
+  const flat = flattenToEnvRecord(data, separator);
   const lines: string[] = [];
   for (const [key, value] of Object.entries(flat)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    if (!isValidEnvKey(key)) continue;
     const raw =
       value === undefined || value === null
         ? ""
@@ -101,7 +62,6 @@ export const dotEnvProvider: ConfigProvider = {
 
   matchesFileName(fileName: string): boolean {
     if (fileName === ".env") return true;
-    // .env.local, .env.development — skip .env.example optionally? include all .env*
     if (fileName === ".env.example" || fileName === ".env.sample") return false;
     return /^\.env\.[^/\\]+$/i.test(fileName);
   },
@@ -110,13 +70,17 @@ export const dotEnvProvider: ConfigProvider = {
     return parseDotEnv(raw);
   },
 
-  serialize(data: unknown): string {
-    return serializeDotEnv(data);
+  serialize(data: unknown, options?: SerializeOptions): string {
+    const casing = options?.casing ?? "preserve";
+    const payload =
+      casing !== "preserve" ? applyObjectKeyCasing(data, casing) : data;
+    return serializeDotEnv(
+      payload,
+      options?.separator ?? DEFAULT_ENV_SEPARATOR,
+    );
   },
 
   describeSiblingName(targetFileName: string): string {
-    // .env -> describe-config.env.json
-    // .env.local -> describe-config.env.local.json
     if (targetFileName === ".env") return "describe-config.env.json";
     return `describe-config${targetFileName}.json`;
   },
@@ -125,3 +89,6 @@ export const dotEnvProvider: ConfigProvider = {
     return ".env";
   },
 };
+
+// Re-export for callers that imported flatten from this module
+export { flattenToEnvRecord } from "../nesting.js";

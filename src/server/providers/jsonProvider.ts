@@ -1,4 +1,5 @@
-import type { ConfigProvider } from "./types.js";
+import type { ConfigProvider, SerializeOptions } from "./types.js";
+import { applyObjectKeyCasing } from "../nesting.js";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -24,15 +25,18 @@ export const jsonProvider: ConfigProvider = {
     return data;
   },
 
-  serialize(data: unknown): string {
-    return `${JSON.stringify(data, null, 4)}\n`;
+  serialize(data: unknown, options?: SerializeOptions): string {
+    const payload =
+      options?.casing && options.casing !== "preserve"
+        ? applyObjectKeyCasing(data, options.casing)
+        : data;
+    return `${JSON.stringify(payload, null, 4)}\n`;
   },
 
   describeSiblingName(targetFileName: string): string {
     if (targetFileName.toLowerCase() === "appsettings.json") {
       return "describe-config.json";
     }
-    // appsettings.Development.json -> describe-config.appsettings.Development.json
     const withoutExt = targetFileName.replace(/\.json$/i, "");
     return `describe-config.${withoutExt}.json`;
   },

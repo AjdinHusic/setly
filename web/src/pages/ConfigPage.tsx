@@ -20,6 +20,9 @@ import { ConfigOutlineNav } from "../components/ConfigOutlineNav";
 import { GenerateActions } from "../components/GenerateActions";
 import { Modal } from "../components/Modal";
 import { PathsInfoButton } from "../components/PathsInfoButton";
+import { SeparatorSelect } from "../components/SeparatorSelect";
+import type { KeyCasing } from "../nesting";
+import { DEFAULT_ENV_SEPARATOR } from "../nesting";
 import {
   buildOutline,
   cloneDescribe,
@@ -34,6 +37,7 @@ import {
   isEmptyValue,
   parseParameterPath,
   projectHref,
+  restructureDescribeForSeparator,
   updateFieldMetaAtPath,
 } from "../util";
 
@@ -104,6 +108,11 @@ export function ConfigPage() {
   const [providerLabel, setProviderLabel] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [outputProviderId, setOutputProviderId] = useState<ProviderId | null>(
+    null,
+  );
+  const [outputSeparator, setOutputSeparator] = useState(DEFAULT_ENV_SEPARATOR);
+  const [outputCasing, setOutputCasing] = useState<KeyCasing>("preserve");
+  const [flatSource, setFlatSource] = useState<Record<string, unknown> | null>(
     null,
   );
   const [describe, setDescribe] = useState<DescribeConfig | null>(null);
@@ -198,6 +207,12 @@ export function ConfigPage() {
         setValues(result.values);
         setBaselineValues(cloneValues(result.values));
         setStalePaths(result.stalePaths);
+        setFlatSource(
+          result.flatSource ? cloneValues(result.flatSource) : null,
+        );
+        const sep = result.describe.Separator ?? DEFAULT_ENV_SEPARATOR;
+        setOutputSeparator(sep);
+        setOutputCasing("preserve");
         refreshProjects();
         if (result.createdDescribe) {
           console.info(
@@ -263,6 +278,33 @@ export function ConfigPage() {
     });
   }
 
+  function handleConfigSeparatorChange(nextSeparator: string) {
+    if (!describe || !flatSource) return;
+    if (!nextSeparator) return;
+    if ((describe.Separator ?? "") === nextSeparator) return;
+    const restructured = restructureDescribeForSeparator(
+      describe,
+      values,
+      flatSource,
+      nextSeparator,
+    );
+    setDescribe(restructured.describe);
+    setValues(restructured.values);
+    setFieldErrors({});
+    setOutputSeparator(nextSeparator);
+  }
+
+  function generateOptions(outputId: ProviderId) {
+    return {
+      outputProviderId: outputId,
+      separator:
+        outputId === "dotenv"
+          ? outputSeparator
+          : (describe?.Separator ?? outputSeparator),
+      casing: outputCasing,
+    };
+  }
+
   function handleCancelPending() {
     if (!baselineDescribe) return;
     setDescribe(cloneDescribe(baselineDescribe));
@@ -270,6 +312,7 @@ export function ConfigPage() {
     setFieldErrors({});
     setGenError(null);
     setInfo(null);
+    setOutputSeparator(baselineDescribe.Separator ?? DEFAULT_ENV_SEPARATOR);
   }
 
   async function handleSavePending() {
@@ -294,6 +337,8 @@ export function ConfigPage() {
       if (valueCount > 0) {
         const result = await generateConfig(targetPath, values, "overwrite", {
           outputProviderId: providerId,
+          separator: describe.Separator ?? DEFAULT_ENV_SEPARATOR,
+          casing: "preserve",
         });
         setBaselineValues(cloneValues(values));
         setGenMessage(
@@ -377,9 +422,12 @@ export function ConfigPage() {
     setPreviewError(null);
     setPreview(null);
     try {
-      const result = await generateConfig(targetPath, values, "preview", {
-        outputProviderId: activeOutputProviderId,
-      });
+      const result = await generateConfig(
+        targetPath,
+        values,
+        "preview",
+        generateOptions(activeOutputProviderId),
+      );
       setPreview(result.text);
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : String(err));
@@ -408,7 +456,7 @@ export function ConfigPage() {
           return;
         }
         const result = await generateConfig(targetPath, values, "write", {
-          outputProviderId: activeOutputProviderId,
+          ...generateOptions(activeOutputProviderId),
           outputPath: selected,
         });
         setPreview(result.text);
@@ -417,9 +465,12 @@ export function ConfigPage() {
       }
 
       const mode = action === "copy" ? "preview" : "overwrite";
-      const result = await generateConfig(targetPath, values, mode, {
-        outputProviderId: activeOutputProviderId,
-      });
+      const result = await generateConfig(
+        targetPath,
+        values,
+        mode,
+        generateOptions(activeOutputProviderId),
+      );
       setPreview(result.text);
       if (action === "copy") {
         await navigator.clipboard.writeText(result.text);
@@ -534,6 +585,17 @@ export function ConfigPage() {
                 stay local until you save from the toolbar.
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
+                {providerId === "dotenv" && flatSource && (
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="font-semibold uppercase tracking-wide">
+                      Separator
+                    </span>
+                    <SeparatorSelect
+                      value={describe.Separator ?? DEFAULT_ENV_SEPARATOR}
+                      onChange={handleConfigSeparatorChange}
+                    />
+                  </label>
+                )}
                 <button
                   type="button"
                   className={thinBtn}
@@ -582,6 +644,10 @@ export function ConfigPage() {
           sourceProviderId={providerId}
           outputProviderId={activeOutputProviderId}
           onOutputProviderChange={setOutputProviderId}
+          outputSeparator={outputSeparator}
+          onOutputSeparatorChange={setOutputSeparator}
+          outputCasing={outputCasing}
+          onOutputCasingChange={setOutputCasing}
           onOverwrite={() => runGenerate("overwrite")}
           onCopy={() => runGenerate("copy")}
           onWriteFile={() => runGenerate("write")}

@@ -5,6 +5,7 @@ import type {
   ParameterNode,
 } from "./types.js";
 import { isFieldMeta } from "./types.js";
+import { splitEnvKey } from "./nesting.js";
 
 function inferType(value: unknown): FieldType {
   if (typeof value === "boolean") return "boolean";
@@ -57,10 +58,12 @@ function makeField(key: string, value: unknown, type: FieldType): FieldMeta {
 export function generateDescribe(
   appsettings: unknown,
   targetFileName: string,
+  options?: { separator?: string },
 ): DescribeConfig {
   return {
     TargetFile: targetFileName,
     Parameters: generateParameters(appsettings),
+    ...(options?.separator ? { Separator: options.separator } : {}),
   };
 }
 
@@ -193,9 +196,130 @@ export function mergeDescribe(
     describe: {
       TargetFile: targetFileName,
       Parameters: mergedParams,
+      ...(existing.Separator ? { Separator: existing.Separator } : {}),
     },
     stalePaths,
   };
+}
+
+/** Env-style key for a field path using the given separator. */
+export function fieldEnvKey(path: string[], separator: string): string {
+  return path.join(separator || ".");
+}
+
+/**
+ * Rebuild Parameters from a nested config object while preserving FieldMeta
+ * when the env key (path joined by separator) matches a previous field.
+ */
+export function rebuildParametersPreservingMeta(
+  nested: Record<string, unknown>,
+  previous: Record<string, ParameterNode>,
+  oldSeparator: string,
+  newSeparator: string,
+): Record<string, ParameterNode> {
+  const prevFields = flattenParameters(previous);
+  const metaByEnvKey = new Map<string, FieldMeta>();
+  for (const field of prevFields) {
+    metaByEnvKey.set(fieldEnvKey(field.path, oldSeparator), { ...field.meta });
+    if (field.path.length === 1) {
+      metaByEnvKey.set(field.path[0]!, { ...field.meta });
+    }
+  }
+
+  const generated = generateParameters(nested);
+
+  function applyMeta(
+    node: ParameterNode,
+    path: string[],
+  ): ParameterNode {
+    if (isFieldMeta(node)) {
+      const envKey = fieldEnvKey(path, newSeparator);
+      const prev =
+        metaByEnvKey.get(envKey) ??
+        metaByEnvKey.get(path.join(".")) ??
+        metaByEnvKey.get(path[path.length - 1]!);
+      if (!prev) return node;
+      return {
+        ...prev,
+        InitialValue: node.InitialValue,
+        Type: prev.Type || node.Type,
+      };
+    }
+    const obj = node as Record<string, ParameterNode>;
+    const next: Record<string, ParameterNode> = {};
+    for (const [key, child] of Object.entries(obj)) {
+      next[key] = applyMeta(child, [...path, key]);
+    }
+    return next;
+  }
+
+  return applyMeta(generated as ParameterNode, []) as Record<
+    string,
+    ParameterNode
+  >;
+}
+
+/**
+ * True when top-level parameter keys still look like flat env keys
+ * that contain the separator (not yet expanded into sections).
+ */
+export function describeHasFlatSeparatorKeys(
+  parameters: Record<string, ParameterNode>,
+  separator: string,
+): boolean {
+  if (!separator) return false;
+  return Object.keys(parameters).some((key) => key.includes(separator));
+}
+
+/**
+ * Expand flat describe leaves whose keys contain the separator into a nested tree.
+ */
+export function expandFlatDescribeParameters(
+  parameters: Record<string, ParameterNode>,
+  separator: string,
+): Record<string, ParameterNode> {
+  if (!separator || !describeHasFlatSeparatorKeys(parameters, separator)) {
+    return parameters;
+  }
+
+  const result: Record<string, ParameterNode> = {};
+
+  function setNested(
+    root: Record<string, ParameterNode>,
+    parts: string[],
+    meta: FieldMeta,
+  ) {
+    let current = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i]!;
+      const existing = current[part];
+      if (!existing || isFieldMeta(existing)) {
+        current[part] = {};
+      }
+      current = current[part] as Record<string, ParameterNode>;
+    }
+    current[parts[parts.length - 1]!] = meta;
+  }
+
+  for (const [key, node] of Object.entries(parameters)) {
+    if (isFieldMeta(node) && key.includes(separator)) {
+      const parts = splitEnvKey(key, separator);
+      if (parts.length > 1) {
+        setNested(result, parts, node);
+        continue;
+      }
+    }
+    if (isFieldMeta(node)) {
+      result[key] = node;
+    } else {
+      result[key] = expandFlatDescribeParameters(
+        node as Record<string, ParameterNode>,
+        separator,
+      );
+    }
+  }
+
+  return result;
 }
 
 /** Build appsettings object from flat path -> value map using describe structure */

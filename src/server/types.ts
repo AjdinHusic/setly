@@ -21,6 +21,11 @@ export type ParameterNode = FieldMeta | { [key: string]: ParameterNode };
 export interface DescribeConfig {
   TargetFile: string;
   Parameters: Record<string, ParameterNode>;
+  /**
+   * Nesting separator for flat key formats (dotenv).
+   * Example: "_" turns HOST_NAME into Host → Name sections.
+   */
+  Separator?: string;
 }
 
 export interface OpenResult {

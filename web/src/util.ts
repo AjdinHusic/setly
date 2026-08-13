@@ -6,6 +6,7 @@ import type {
   ParameterNode,
   ProviderId,
 } from "./api";
+import { unflattenEnvRecord } from "./nesting";
 
 export function isFieldMeta(node: ParameterNode): node is FieldMeta {
   return (
@@ -438,11 +439,12 @@ export function countDescribeChanges(
   current: DescribeConfig,
   baseline: DescribeConfig,
 ): number {
+  let n = 0;
+  if ((current.Separator ?? "") !== (baseline.Separator ?? "")) n += 1;
   const curFields = flattenParameters(current.Parameters);
   const baseFields = flattenParameters(baseline.Parameters);
   const baseByKey = new Map(baseFields.map((f) => [f.pathKey, f.meta]));
   const curKeys = new Set(curFields.map((f) => f.pathKey));
-  let n = 0;
   for (const field of curFields) {
     const base = baseByKey.get(field.pathKey);
     if (!base || !valuesEqual(field.meta, base)) n += 1;
@@ -548,6 +550,158 @@ export function defaultValueForType(type: FieldType): unknown {
     default:
       return "";
   }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inferType(value: unknown): FieldType {
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "number") return "number";
+  if (typeof value === "string") return "string";
+  return "json";
+}
+
+function defaultLabel(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function makeField(key: string, value: unknown, type: FieldType): FieldMeta {
+  return {
+    InitialValue: value,
+    Type: type,
+    Description: "",
+    Label: defaultLabel(key),
+    Required: false,
+  };
+}
+
+function generateParameters(
+  value: unknown,
+): Record<string, ParameterNode> {
+  if (!isPlainObject(value)) return {};
+  const result: Record<string, ParameterNode> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isPlainObject(child) && Object.keys(child).length > 0) {
+      result[key] = generateParameters(child);
+    } else if (isPlainObject(child)) {
+      result[key] = makeField(key, child, "json");
+    } else {
+      result[key] = makeField(key, child, inferType(child));
+    }
+  }
+  return result;
+}
+
+function fieldEnvKey(path: string[], separator: string): string {
+  return path.join(separator || ".");
+}
+
+function rebuildParametersPreservingMeta(
+  nested: Record<string, unknown>,
+  previous: Record<string, ParameterNode>,
+  oldSeparator: string,
+  newSeparator: string,
+): Record<string, ParameterNode> {
+  const prevFields = flattenParameters(previous);
+  const metaByEnvKey = new Map<string, FieldMeta>();
+  for (const field of prevFields) {
+    metaByEnvKey.set(fieldEnvKey(field.path, oldSeparator), { ...field.meta });
+    if (field.path.length === 1) {
+      metaByEnvKey.set(field.path[0]!, { ...field.meta });
+    }
+  }
+
+  const generated = generateParameters(nested);
+
+  function applyMeta(node: ParameterNode, path: string[]): ParameterNode {
+    if (isFieldMeta(node)) {
+      const envKey = fieldEnvKey(path, newSeparator);
+      const prev =
+        metaByEnvKey.get(envKey) ??
+        metaByEnvKey.get(path.join(".")) ??
+        metaByEnvKey.get(path[path.length - 1]!);
+      if (!prev) return node;
+      return {
+        ...prev,
+        InitialValue: node.InitialValue,
+        Type: prev.Type || node.Type,
+      };
+    }
+    const obj = node as Record<string, ParameterNode>;
+    const next: Record<string, ParameterNode> = {};
+    for (const [key, child] of Object.entries(obj)) {
+      next[key] = applyMeta(child, [...path, key]);
+    }
+    return next;
+  }
+
+  return applyMeta(generated as ParameterNode, []) as Record<
+    string,
+    ParameterNode
+  >;
+}
+
+function valuesFromNested(
+  parameters: Record<string, ParameterNode>,
+  nested: Record<string, unknown>,
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  function getAt(path: string[]): unknown {
+    let current: unknown = nested;
+    for (const segment of path) {
+      if (!isPlainObject(current) || !(segment in current)) return undefined;
+      current = current[segment];
+    }
+    return current;
+  }
+  for (const field of flattenParameters(parameters)) {
+    const fromFile = getAt(field.path);
+    values[field.pathKey] =
+      fromFile !== undefined ? fromFile : field.meta.InitialValue;
+  }
+  return values;
+}
+
+/**
+ * Re-section a dotenv describe when the nesting separator changes.
+ * Uses the original flat source keys, overlays current draft values.
+ */
+export function restructureDescribeForSeparator(
+  describe: DescribeConfig,
+  values: Record<string, unknown>,
+  flatSource: Record<string, unknown>,
+  newSeparator: string,
+): { describe: DescribeConfig; values: Record<string, unknown> } {
+  const oldSeparator = describe.Separator || "_";
+  const flatValues: Record<string, unknown> = { ...flatSource };
+  for (const field of flattenParameters(describe.Parameters)) {
+    const envKey = fieldEnvKey(field.path, oldSeparator);
+    if (Object.prototype.hasOwnProperty.call(values, field.pathKey)) {
+      flatValues[envKey] = values[field.pathKey];
+    }
+  }
+
+  const nested = unflattenEnvRecord(flatValues, newSeparator);
+  const parameters = rebuildParametersPreservingMeta(
+    nested,
+    describe.Parameters,
+    oldSeparator,
+    newSeparator,
+  );
+  const nextDescribe: DescribeConfig = {
+    ...describe,
+    Separator: newSeparator,
+    Parameters: parameters,
+  };
+  return {
+    describe: nextDescribe,
+    values: valuesFromNested(parameters, nested),
+  };
 }
 
 export function configHref(filePath: string): string {

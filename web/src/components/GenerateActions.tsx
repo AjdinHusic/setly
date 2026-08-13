@@ -1,4 +1,7 @@
 import type { ProviderId, ProviderInfo } from "../api";
+import type { KeyCasing } from "../nesting";
+import { KEY_CASING_OPTIONS } from "../nesting";
+import { SeparatorSelect } from "./SeparatorSelect";
 
 export interface PendingChanges {
   total: number;
@@ -12,6 +15,10 @@ interface GenerateActionsProps {
   sourceProviderId: ProviderId;
   outputProviderId: ProviderId;
   onOutputProviderChange: (id: ProviderId) => void;
+  outputSeparator: string;
+  onOutputSeparatorChange: (value: string) => void;
+  outputCasing: KeyCasing;
+  onOutputCasingChange: (value: KeyCasing) => void;
   onOverwrite: () => void;
   onCopy: () => void;
   onWriteFile: () => void;
@@ -117,6 +124,10 @@ export function GenerateActions({
   sourceProviderId,
   outputProviderId,
   onOutputProviderChange,
+  outputSeparator,
+  onOutputSeparatorChange,
+  outputCasing,
+  onOutputCasingChange,
   onOverwrite,
   onCopy,
   onWriteFile,
@@ -132,9 +143,12 @@ export function GenerateActions({
   const isNativeOutput = outputProviderId === sourceProviderId;
   const outputLabel =
     providers.find((p) => p.id === outputProviderId)?.label ?? outputProviderId;
+  const showSeparator = outputProviderId === "dotenv";
 
   const chip =
     "inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50";
+  const selectClass =
+    "rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs text-white outline-none focus:border-accent focus:ring-1 focus:ring-accent/40";
 
   const hasPending = pending != null && pending.total > 0;
 
@@ -189,7 +203,7 @@ export function GenerateActions({
             </label>
             <select
               id="output-provider"
-              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs text-white outline-none focus:border-accent focus:ring-1 focus:ring-accent/40"
+              className={selectClass}
               value={outputProviderId}
               disabled={busy || providers.length === 0}
               onChange={(e) =>
@@ -204,6 +218,50 @@ export function GenerateActions({
                 >
                   {provider.label}
                   {provider.id === sourceProviderId ? " (native)" : ""}
+                </option>
+              ))}
+            </select>
+
+            {showSeparator && (
+              <>
+                <label
+                  className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45"
+                  htmlFor="output-separator"
+                >
+                  Separator
+                </label>
+                <SeparatorSelect
+                  id="output-separator"
+                  tone="dark"
+                  value={outputSeparator}
+                  disabled={busy}
+                  onChange={onOutputSeparatorChange}
+                />
+              </>
+            )}
+
+            <label
+              className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45"
+              htmlFor="output-casing"
+            >
+              Casing
+            </label>
+            <select
+              id="output-casing"
+              className={selectClass}
+              value={outputCasing}
+              disabled={busy}
+              onChange={(e) =>
+                onOutputCasingChange(e.target.value as KeyCasing)
+              }
+            >
+              {KEY_CASING_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-[#15202b] text-ink"
+                >
+                  {opt.label}
                 </option>
               ))}
             </select>
