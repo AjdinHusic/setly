@@ -21,6 +21,7 @@ import {
   mergeDescribe,
   valuesFromAppsettings,
 } from "./describe.js";
+import { openCombinedConfig } from "./combine.js";
 import {
   DEFAULT_ENV_SEPARATOR,
   detectEnvSeparator,
@@ -234,6 +235,7 @@ export function createApp(options?: { staticDir?: string }) {
         outputPath: outputPathInput,
         separator: separatorInput,
         casing: casingInput,
+        describe: describeOverride,
       } = req.body ?? {};
       if (typeof targetPathInput !== "string" || !targetPathInput.trim()) {
         res.status(400).json({ error: "path is required" });
@@ -253,7 +255,11 @@ export function createApp(options?: { staticDir?: string }) {
         targetPath,
         sourceProvider.describeSiblingName(path.basename(targetPath)),
       );
-      if (!(await pathExists(describePath))) {
+      const describe =
+        describeOverride && typeof describeOverride === "object"
+          ? (describeOverride as DescribeConfig)
+          : await readJsonFile<DescribeConfig>(describePath);
+      if (!(await pathExists(describePath)) && !describeOverride) {
         res.status(400).json({
           error: "describe-config not found; open the target first",
         });
@@ -272,7 +278,6 @@ export function createApp(options?: { staticDir?: string }) {
         }
       }
 
-      const describe = await readJsonFile<DescribeConfig>(describePath);
       const configData = buildAppsettingsFromValues(
         describe,
         values as Record<string, unknown>,
@@ -329,6 +334,53 @@ export function createApp(options?: { staticDir?: string }) {
         configData,
         text,
       });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: message });
+    }
+  });
+
+  app.post("/api/combine/open", async (req, res) => {
+    try {
+      const {
+        paths,
+        dominantPath,
+        excludedPaths,
+      } = req.body ?? {};
+      if (!Array.isArray(paths) || paths.length < 2) {
+        res.status(400).json({
+          error: "paths must be an array of at least two config files",
+        });
+        return;
+      }
+      if (typeof dominantPath !== "string" || !dominantPath.trim()) {
+        res.status(400).json({ error: "dominantPath is required" });
+        return;
+      }
+      const resolvedPaths: string[] = [];
+      for (const p of paths) {
+        if (typeof p !== "string" || !p.trim()) {
+          res.status(400).json({ error: "each path must be a string" });
+          return;
+        }
+        resolvedPaths.push(await resolveExistingPath(p));
+      }
+      const dominant = await resolveExistingPath(dominantPath);
+      const excluded =
+        Array.isArray(excludedPaths)
+          ? await Promise.all(
+              excludedPaths
+                .filter((p: unknown) => typeof p === "string")
+                .map((p: string) => resolveExistingPath(p)),
+            )
+          : [];
+
+      const result = await openCombinedConfig({
+        paths: resolvedPaths,
+        dominantPath: dominant,
+        excludedPaths: excluded,
+      });
+      res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });

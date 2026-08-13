@@ -79,11 +79,20 @@ export function updateFieldMetaAtPath(
   };
 }
 
+export interface CombinedView {
+  id: string;
+  label: string;
+  sourcePaths: string[];
+  dominantPath: string;
+  excludedPaths: string[];
+}
+
 export interface StoredProject {
   id: string;
   rootPath: string;
   label: string;
   configs: DiscoveredConfig[];
+  combines?: CombinedView[];
   addedAt: number;
   lastOpenedAt: number;
 }
@@ -305,7 +314,8 @@ export function isEmptyValue(value: unknown): boolean {
     value === undefined ||
     value === null ||
     value === "" ||
-    (typeof value === "string" && value.trim() === "")
+    (typeof value === "string" && value.trim() === "") ||
+    (Array.isArray(value) && value.length === 0)
   );
 }
 
@@ -576,6 +586,8 @@ export function defaultValueForType(type: FieldType): unknown {
       return false;
     case "json":
       return {};
+    case "list":
+      return [];
     case "dropdown":
     case "string":
     default:
@@ -741,4 +753,58 @@ export function configHref(filePath: string): string {
 
 export function projectHref(projectId: string): string {
   return `/project?id=${encodeURIComponent(projectId)}`;
+}
+
+export function combineHref(projectId: string, combineId: string): string {
+  return `/combine?project=${encodeURIComponent(projectId)}&id=${encodeURIComponent(combineId)}`;
+}
+
+export function upsertCombinedView(
+  projectId: string,
+  combine: CombinedView,
+): StoredProject[] {
+  const projects = readProjectsRaw();
+  const next = projects.map((p) => {
+    if (p.id !== projectId) return p;
+    const combines = [...(p.combines ?? [])];
+    const idx = combines.findIndex((c) => c.id === combine.id);
+    if (idx >= 0) combines[idx] = combine;
+    else combines.push(combine);
+    return { ...p, combines, lastOpenedAt: Date.now() };
+  });
+  return writeProjects(next);
+}
+
+export function removeCombinedView(
+  projectId: string,
+  combineId: string,
+): StoredProject[] {
+  const projects = readProjectsRaw();
+  const next = projects.map((p) => {
+    if (p.id !== projectId) return p;
+    return {
+      ...p,
+      combines: (p.combines ?? []).filter((c) => c.id !== combineId),
+    };
+  });
+  return writeProjects(next);
+}
+
+export function createCombinedView(
+  projectId: string,
+  input: {
+    label: string;
+    sourcePaths: string[];
+    dominantPath: string;
+  },
+): CombinedView {
+  const combine: CombinedView = {
+    id: newId(),
+    label: input.label.trim() || "Combined view",
+    sourcePaths: input.sourcePaths,
+    dominantPath: input.dominantPath,
+    excludedPaths: [],
+  };
+  upsertCombinedView(projectId, combine);
+  return combine;
 }

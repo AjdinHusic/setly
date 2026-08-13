@@ -366,6 +366,7 @@ export function ConfigPage() {
     required: boolean;
     initialValue: unknown;
     options?: DropdownOption[];
+    itemType?: import("../api").ScalarFieldType;
   }) {
     if (!describe || !targetPath) return;
     const path =
@@ -383,6 +384,9 @@ export function ConfigPage() {
       Label: input.label.trim() || leafKey,
       Required: input.required,
       ...(input.type === "dropdown" ? { Options: input.options ?? [] } : {}),
+      ...(input.type === "list"
+        ? { ItemType: input.itemType ?? "string" }
+        : {}),
     };
     const nextDescribe: DescribeConfig = {
       ...describe,

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { DropdownOption, FieldMeta, FieldType, ParameterNode } from "../api";
+import type {
+  DropdownOption,
+  FieldMeta,
+  FieldType,
+  ParameterNode,
+  ScalarFieldType,
+} from "../api";
 import { OptionSelect } from "./OptionSelect";
 import {
   fieldDomId,
@@ -18,7 +24,97 @@ const FIELD_TYPES: FieldType[] = [
   "boolean",
   "json",
   "dropdown",
+  "list",
 ];
+
+const LIST_ITEM_TYPES: ScalarFieldType[] = ["string", "number", "boolean"];
+
+function formatTypeLabel(meta: FieldMeta): string {
+  if (meta.Type === "list") {
+    return `list<${meta.ItemType ?? "string"}>`;
+  }
+  return meta.Type;
+}
+
+function ListEditor({
+  id,
+  value,
+  itemType,
+  onChange,
+}: {
+  id?: string;
+  value: unknown;
+  itemType: ScalarFieldType;
+  onChange: (next: unknown[]) => void;
+}) {
+  const items = Array.isArray(value) ? value : [];
+
+  function updateAt(index: number, raw: string) {
+    const next = [...items];
+    if (itemType === "number") {
+      next[index] = raw === "" ? "" : Number(raw);
+    } else if (itemType === "boolean") {
+      next[index] = raw === "true";
+    } else {
+      next[index] = raw;
+    }
+    onChange(next);
+  }
+
+  function defaultItem(): unknown {
+    if (itemType === "number") return 0;
+    if (itemType === "boolean") return false;
+    return "";
+  }
+
+  return (
+    <div className="max-w-lg space-y-1.5">
+      {items.length === 0 && (
+        <p className="text-[12px] italic text-muted">Empty list</p>
+      )}
+      {items.map((item, index) => (
+        <div key={index} className="flex items-center gap-1.5">
+          <span className="w-6 shrink-0 font-mono text-[10px] text-muted">
+            [{index}]
+          </span>
+          {itemType === "boolean" ? (
+            <select
+              id={index === 0 ? id : undefined}
+              className="input max-w-[8rem]"
+              value={item ? "true" : "false"}
+              onChange={(e) => updateAt(index, e.target.value)}
+            >
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          ) : (
+            <input
+              id={index === 0 ? id : undefined}
+              className="input font-mono"
+              type={itemType === "number" ? "number" : "text"}
+              value={item == null ? "" : String(item)}
+              onChange={(e) => updateAt(index, e.target.value)}
+            />
+          )}
+          <button
+            type="button"
+            className="btn-ghost text-[11px] text-danger"
+            onClick={() => onChange(items.filter((_, i) => i !== index))}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn-ghost text-[11px]"
+        onClick={() => onChange([...items, defaultItem()])}
+      >
+        Add item
+      </button>
+    </div>
+  );
+}
 
 interface ConfigFormProps {
   parameters: Record<string, ParameterNode>;
@@ -31,6 +127,8 @@ interface ConfigFormProps {
   highlightPathKey?: string | null;
   /** When set, field keys are shown joined with this separator (dotenv). */
   keySeparator?: string | null;
+  /** Optional per-field source attribution (combine view). */
+  fieldSources?: Record<string, string>;
 }
 
 type EditPart = "label" | "description" | "default" | "type" | null;
@@ -184,6 +282,7 @@ function FieldRow({
   onResetField,
   onMetaChange,
   keySeparator,
+  sourceHint,
 }: {
   field: FlatField;
   value: unknown;
@@ -193,6 +292,7 @@ function FieldRow({
   onResetField: (pathKey: string) => void;
   onMetaChange: (path: string[], patch: Partial<FieldMeta>) => void;
   keySeparator?: string | null;
+  sourceHint?: string;
 }) {
   const { meta, path, pathKey } = field;
   const id = fieldDomId(pathKey);
@@ -201,6 +301,9 @@ function FieldRow({
   const atDefault = valuesEqual(value, meta.InitialValue);
   const [editPart, setEditPart] = useState<EditPart>(null);
   const [draft, setDraft] = useState("");
+  const [draftItemType, setDraftItemType] = useState<ScalarFieldType>(
+    meta.ItemType ?? "string",
+  );
   const [draftOptions, setDraftOptions] = useState<DropdownOption[]>([]);
   const inputRef = useRef<
     HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null
@@ -233,6 +336,7 @@ function FieldRow({
       );
     } else if (part === "type") {
       setDraft(meta.Type);
+      setDraftItemType(meta.ItemType ?? "string");
       setDraftOptions(meta.Options ? meta.Options.map((o) => ({ ...o })) : []);
     }
     setEditPart(part);
@@ -265,7 +369,7 @@ function FieldRow({
       }
     } else if (meta.Type === "boolean") {
       initial = draft === "true";
-    } else if (meta.Type === "json") {
+    } else if (meta.Type === "json" || meta.Type === "list") {
       try {
         initial = JSON.parse(draft);
       } catch {
@@ -281,6 +385,16 @@ function FieldRow({
     const patch: Partial<FieldMeta> = { Type: next };
     if (next === "dropdown") {
       patch.Options = draftOptions;
+      patch.ItemType = undefined;
+    } else if (next === "list") {
+      patch.ItemType = draftItemType;
+      patch.Options = undefined;
+      if (!Array.isArray(meta.InitialValue)) {
+        patch.InitialValue = [];
+      }
+    } else {
+      patch.Options = undefined;
+      patch.ItemType = undefined;
     }
     onMetaChange(path, patch);
     cancelEdit();
@@ -358,6 +472,13 @@ function FieldRow({
         )}
       </div>
 
+      {sourceHint && (
+        <p className="mb-1.5 text-[11px] text-muted">
+          Takes from{" "}
+          <span className="font-medium text-ink/80">{sourceHint}</span>
+        </p>
+      )}
+
       <div className="mb-3 flex flex-col gap-1.5">
         <HoverEditable
           editing={editPart === "description"}
@@ -426,14 +547,32 @@ function FieldRow({
                       },
                     ]);
                   }
+                  if (next === "list") {
+                    setDraftItemType(meta.ItemType ?? "string");
+                  }
                 }}
               >
                 {FIELD_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {t === "list" ? "list<…>" : t}
                   </option>
                 ))}
               </select>
+              {draft === "list" && (
+                <select
+                  className="input max-w-[8rem] py-0.5 text-[11px]"
+                  value={draftItemType}
+                  onChange={(e) =>
+                    setDraftItemType(e.target.value as ScalarFieldType)
+                  }
+                >
+                  {LIST_ITEM_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 className="btn-primary px-2 py-1 text-[11px]"
@@ -464,7 +603,7 @@ function FieldRow({
               <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
                 Type:{" "}
                 <span className="rounded-md bg-panel-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-ink/80">
-                  {meta.Type}
+                  {formatTypeLabel(meta)}
                 </span>
               </span>
             }
@@ -592,6 +731,13 @@ function FieldRow({
           value={displayValue(value, meta.Type)}
           onChange={(e) => onChange(pathKey, e.target.value)}
         />
+      ) : meta.Type === "list" ? (
+        <ListEditor
+          id={id}
+          value={value}
+          itemType={meta.ItemType ?? "string"}
+          onChange={(next) => onChange(pathKey, next)}
+        />
       ) : meta.Type === "dropdown" ? (
         <OptionSelect
           id={id}
@@ -627,6 +773,7 @@ function ParameterTree({
   onResetField,
   onMetaChange,
   keySeparator,
+  fieldSources,
 }: {
   parameters: Record<string, ParameterNode>;
   prefix: string[];
@@ -639,6 +786,7 @@ function ParameterTree({
   onResetField: (pathKey: string) => void;
   onMetaChange: (path: string[], patch: Partial<FieldMeta>) => void;
   keySeparator?: string | null;
+  fieldSources?: Record<string, string>;
 }) {
   const entries = Object.entries(parameters);
 
@@ -663,6 +811,7 @@ function ParameterTree({
               onResetField={onResetField}
               onMetaChange={onMetaChange}
               keySeparator={keySeparator}
+              sourceHint={fieldSources?.[pathKey]}
             />
           );
         }
@@ -721,6 +870,7 @@ function ParameterTree({
                 onResetField={onResetField}
                 onMetaChange={onMetaChange}
                 keySeparator={keySeparator}
+                fieldSources={fieldSources}
               />
             </div>
           </section>
@@ -740,6 +890,7 @@ export function ConfigForm({
   onMetaChange,
   highlightPathKey,
   keySeparator,
+  fieldSources,
 }: ConfigFormProps) {
   if (fields.length === 0) {
     return <p className="text-sm text-muted">No configurable fields found.</p>;
@@ -760,6 +911,7 @@ export function ConfigForm({
       onResetField={onResetField}
       onMetaChange={onMetaChange}
       keySeparator={keySeparator}
+      fieldSources={fieldSources}
     />
   );
 }

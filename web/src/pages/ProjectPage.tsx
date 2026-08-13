@@ -3,8 +3,11 @@ import { Link, useNavigate, useOutletContext, useSearchParams } from "react-rout
 import { scanProject } from "../api";
 import type { AppOutletContext } from "../components/AppLayout";
 import {
+  combineHref,
   configHref,
+  createCombinedView,
   getProjectById,
+  removeCombinedView,
   touchProject,
   updateProjectLabel,
   upsertScannedProject,
@@ -26,6 +29,10 @@ export function ProjectPage() {
   const [rescanning, setRescanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [combineMode, setCombineMode] = useState(false);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [dominantPath, setDominantPath] = useState("");
+  const [combineLabel, setCombineLabel] = useState("Combined view");
 
   if (!projectId || !project) {
     return (
@@ -69,6 +76,35 @@ export function ProjectPage() {
     } finally {
       setRescanning(false);
     }
+  }
+
+  function toggleSelect(path: string) {
+    setSelectedPaths((prev) => {
+      const next = prev.includes(path)
+        ? prev.filter((p) => p !== path)
+        : [...prev, path];
+      if (!next.includes(dominantPath)) {
+        setDominantPath(next[0] ?? "");
+      }
+      return next;
+    });
+  }
+
+  function createCombine() {
+    if (selectedPaths.length < 2) {
+      setError("Select at least two config files to combine.");
+      return;
+    }
+    const dominant = dominantPath || selectedPaths[0]!;
+    const created = createCombinedView(project!.id, {
+      label: combineLabel,
+      sourcePaths: selectedPaths,
+      dominantPath: dominant,
+    });
+    refreshProjects();
+    setCombineMode(false);
+    setSelectedPaths([]);
+    navigate(combineHref(project!.id, created.id));
   }
 
   return (
@@ -122,6 +158,20 @@ export function ProjectPage() {
           >
             {rescanning ? "Rescanning…" : "Rescan folder"}
           </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={project.configs.length < 2}
+            onClick={() => {
+              setCombineMode((v) => !v);
+              setError(null);
+              setSelectedPaths([]);
+              setDominantPath("");
+              setCombineLabel("Combined view");
+            }}
+          >
+            {combineMode ? "Cancel combine" : "Combine configs"}
+          </button>
         </div>
       </header>
 
@@ -136,6 +186,72 @@ export function ProjectPage() {
         </p>
       )}
 
+      {combineMode && (
+        <section className="mb-6 rounded-xl border border-accent/30 bg-accent-soft/30 p-4">
+          <h3 className="text-sm font-semibold text-ink">New combined view</h3>
+          <p className="mt-1 text-xs text-muted">
+            Select two or more configs, pick a dominant file (wins on conflicts),
+            then open the virtual merged form.
+          </p>
+          <label className="mt-3 block text-xs font-medium text-muted">
+            Label
+            <input
+              className="input mt-1"
+              value={combineLabel}
+              onChange={(e) => setCombineLabel(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-primary mt-3"
+            disabled={selectedPaths.length < 2}
+            onClick={createCombine}
+          >
+            Create & open
+          </button>
+        </section>
+      )}
+
+      {(project.combines?.length ?? 0) > 0 && (
+        <section className="mb-6 rounded-xl border border-line bg-panel shadow-sm">
+          <div className="border-b border-line px-5 py-3">
+            <h3 className="text-sm font-semibold text-ink">Combined views</h3>
+          </div>
+          <ul className="divide-y divide-line">
+            {project.combines!.map((view) => (
+              <li
+                key={view.id}
+                className="flex items-center justify-between gap-3 px-5 py-3"
+              >
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => navigate(combineHref(project.id, view.id))}
+                >
+                  <div className="text-[15px] font-semibold text-ink">
+                    {view.label}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted">
+                    {view.sourcePaths.length} sources · dominant{" "}
+                    {view.dominantPath.split(/[/\\]/).pop()}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost text-[11px] text-danger"
+                  onClick={() => {
+                    removeCombinedView(project.id, view.id);
+                    refreshProjects();
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="rounded-xl border border-line bg-panel shadow-sm">
         <div className="border-b border-line px-5 py-3">
           <h3 className="text-sm font-semibold text-ink">Config files</h3>
@@ -148,27 +264,60 @@ export function ProjectPage() {
           <ul className="divide-y divide-line">
             {project.configs.map((config) => (
               <li key={config.path}>
-                <button
-                  type="button"
-                  className="flex w-full items-start justify-between gap-3 px-5 py-4 text-left transition hover:bg-panel-2/60"
-                  onClick={() => {
-                    touchProject(project.id);
-                    refreshProjects();
-                    navigate(configHref(config.path));
-                  }}
-                >
-                  <div className="min-w-0">
-                    <div className="text-[15px] font-semibold text-ink">
-                      {config.displayName}
+                {combineMode ? (
+                  <div className="flex w-full items-start gap-3 px-5 py-4">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 rounded border-line text-accent"
+                      checked={selectedPaths.includes(config.path)}
+                      onChange={() => toggleSelect(config.path)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold text-ink">
+                        {config.displayName}
+                      </div>
+                      <div className="mt-1 font-mono text-xs text-muted break-all">
+                        {config.relativePath}
+                      </div>
+                      {selectedPaths.includes(config.path) && (
+                        <label className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-muted">
+                          <input
+                            type="radio"
+                            name="new-dominant"
+                            checked={dominantPath === config.path}
+                            onChange={() => setDominantPath(config.path)}
+                          />
+                          Dominant
+                        </label>
+                      )}
                     </div>
-                    <div className="mt-1 font-mono text-xs text-muted break-all">
-                      {config.relativePath}
-                    </div>
+                    <span className="shrink-0 rounded-md bg-panel-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      {config.providerId}
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-md bg-panel-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
-                    {config.providerId}
-                  </span>
-                </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="flex w-full items-start justify-between gap-3 px-5 py-4 text-left transition hover:bg-panel-2/60"
+                    onClick={() => {
+                      touchProject(project.id);
+                      refreshProjects();
+                      navigate(configHref(config.path));
+                    }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-semibold text-ink">
+                        {config.displayName}
+                      </div>
+                      <div className="mt-1 font-mono text-xs text-muted break-all">
+                        {config.relativePath}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-md bg-panel-2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      {config.providerId}
+                    </span>
+                  </button>
+                )}
               </li>
             ))}
           </ul>

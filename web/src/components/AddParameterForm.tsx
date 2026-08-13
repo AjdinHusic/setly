@@ -1,8 +1,16 @@
 import { useMemo, useState, type FormEvent } from "react";
-import type { DropdownOption, FieldType } from "../api";
+import type { DropdownOption, FieldType, ScalarFieldType } from "../api";
 import { OptionSelect } from "./OptionSelect";
 
-const TYPES: FieldType[] = ["string", "number", "boolean", "json", "dropdown"];
+const TYPES: FieldType[] = [
+  "string",
+  "number",
+  "boolean",
+  "json",
+  "dropdown",
+  "list",
+];
+const LIST_ITEM_TYPES: ScalarFieldType[] = ["string", "number", "boolean"];
 
 interface AddParameterFormProps {
   busy: boolean;
@@ -18,6 +26,7 @@ interface AddParameterFormProps {
     required: boolean;
     initialValue: unknown;
     options?: DropdownOption[];
+    itemType?: ScalarFieldType;
   }) => Promise<void> | void;
   defaultValueForType: (type: FieldType) => unknown;
 }
@@ -32,6 +41,7 @@ export function AddParameterForm({
   const [path, setPath] = useState("");
   const [label, setLabel] = useState("");
   const [type, setType] = useState<FieldType>("string");
+  const [itemType, setItemType] = useState<ScalarFieldType>("string");
   const [description, setDescription] = useState("");
   const [required, setRequired] = useState(false);
   const [initialRaw, setInitialRaw] = useState("");
@@ -60,6 +70,16 @@ export function AddParameterForm({
           initialRaw.trim() !== ""
             ? initialRaw
             : (options[0]?.Value ?? "");
+      } else if (type === "list") {
+        if (initialRaw.trim() !== "") {
+          const parsed = JSON.parse(initialRaw) as unknown;
+          if (!Array.isArray(parsed)) {
+            throw new Error("List default must be a JSON array");
+          }
+          initialValue = parsed;
+        } else {
+          initialValue = [];
+        }
       } else if (initialRaw.trim() !== "") {
         if (type === "number") {
           const n = Number(initialRaw);
@@ -84,6 +104,7 @@ export function AddParameterForm({
         required,
         initialValue,
         options: type === "dropdown" ? options : undefined,
+        itemType: type === "list" ? itemType : undefined,
       });
       setPath("");
       setLabel("");
@@ -172,11 +193,33 @@ export function AddParameterForm({
           >
             {TYPES.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {t === "list" ? "list<…>" : t}
               </option>
             ))}
           </select>
         </div>
+        {type === "list" && (
+          <div>
+            <label
+              className="mb-1 block text-xs font-medium text-muted"
+              htmlFor="add-item-type"
+            >
+              List item type
+            </label>
+            <select
+              id="add-item-type"
+              className="input"
+              value={itemType}
+              onChange={(e) => setItemType(e.target.value as ScalarFieldType)}
+            >
+              {LIST_ITEM_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label
             className="mb-1 block text-xs font-medium text-muted"
@@ -273,7 +316,11 @@ export function AddParameterForm({
               className="input font-mono text-[13px]"
               value={initialRaw}
               onChange={(e) => setInitialRaw(e.target.value)}
-              placeholder={placeholderDefault || "(type default)"}
+              placeholder={
+                type === "list"
+                  ? '["a","b"]'
+                  : placeholderDefault || "(type default)"
+              }
             />
           </div>
         )}

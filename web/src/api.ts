@@ -1,4 +1,10 @@
-export type FieldType = "string" | "number" | "boolean" | "json" | "dropdown";
+export type ScalarFieldType = "string" | "number" | "boolean";
+export type FieldType =
+  | ScalarFieldType
+  | "json"
+  | "dropdown"
+  | "list";
+
 export type ProviderId = "json" | "dotenv";
 
 export type { KeyCasing } from "./nesting";
@@ -17,6 +23,8 @@ export interface FieldMeta {
   Required: boolean;
   /** Present when Type is "dropdown" — label/value pairs for the select. */
   Options?: DropdownOption[];
+  /** Present when Type is "list" — element type (string, number, or boolean). */
+  ItemType?: ScalarFieldType;
 }
 
 export type ParameterNode = FieldMeta | { [key: string]: ParameterNode };
@@ -161,6 +169,7 @@ export function generateConfig(
     outputPath?: string;
     separator?: string;
     casing?: KeyCasing;
+    describe?: DescribeConfig;
   },
 ) {
   return request<{
@@ -182,6 +191,43 @@ export function generateConfig(
       outputPath: options?.outputPath,
       separator: options?.separator,
       casing: options?.casing,
+      describe: options?.describe,
     }),
+  });
+}
+
+export interface CombineSourceInfo {
+  path: string;
+  fileName: string;
+  providerId: ProviderId;
+  providerLabel: string;
+  excluded: boolean;
+}
+
+export interface FieldSourceInfo {
+  pathKey: string;
+  sourcePath: string;
+  sourceFileName: string;
+  displayKey: string;
+  label: string;
+}
+
+export interface CombineOpenResponse {
+  sources: CombineSourceInfo[];
+  dominantPath: string;
+  configData: unknown;
+  describe: DescribeConfig;
+  values: Record<string, unknown>;
+  fieldSources: FieldSourceInfo[];
+}
+
+export function openCombine(input: {
+  paths: string[];
+  dominantPath: string;
+  excludedPaths?: string[];
+}) {
+  return request<CombineOpenResponse>("/api/combine/open", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }

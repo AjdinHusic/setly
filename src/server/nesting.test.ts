@@ -102,12 +102,32 @@ describe("unflattenEnvRecord / flattenToEnvRecord", () => {
     expect(unflattenEnvRecord(flat, "")).toEqual(flat);
   });
 
-  it("stringifies object leaves on flatten", () => {
-    expect(flattenToEnvRecord({ Meta: { a: 1 } }, "_")).toEqual({
-      Meta_a: 1,
-    });
+  it("indexes scalar arrays instead of JSON-stringifying", () => {
     expect(flattenToEnvRecord({ List: [1, 2] }, "_")).toEqual({
-      List: "[1,2]",
+      List_0: 1,
+      List_1: 2,
+    });
+    expect(
+      flattenToEnvRecord({ Features: { AllowedOrigins: ["a", "b"] } }, "_"),
+    ).toEqual({
+      Features_AllowedOrigins_0: "a",
+      Features_AllowedOrigins_1: "b",
+    });
+  });
+
+  it("round-trips indexed list keys back to arrays", () => {
+    const flat = {
+      Features_AllowedOrigins_0: "a",
+      Features_AllowedOrigins_1: "b",
+    };
+    expect(unflattenEnvRecord(flat, "_")).toEqual({
+      Features: { AllowedOrigins: ["a", "b"] },
+    });
+  });
+
+  it("still JSON-stringifies arrays of objects", () => {
+    expect(flattenToEnvRecord({ Rows: [{ a: 1 }] }, "_")).toEqual({
+      Rows: '[{"a":1}]',
     });
   });
 

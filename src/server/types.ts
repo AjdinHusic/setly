@@ -1,4 +1,9 @@
-export type FieldType = "string" | "number" | "boolean" | "json" | "dropdown";
+export type ScalarFieldType = "string" | "number" | "boolean";
+export type FieldType =
+  | ScalarFieldType
+  | "json"
+  | "dropdown"
+  | "list";
 
 export interface DropdownOption {
   Label: string;
@@ -13,6 +18,8 @@ export interface FieldMeta {
   Required: boolean;
   /** Present when Type is "dropdown" — label/value pairs for the select. */
   Options?: DropdownOption[];
+  /** Present when Type is "list" — element type (string, number, or boolean). */
+  ItemType?: ScalarFieldType;
 }
 
 /** Nested map mirroring appsettings; leaves are FieldMeta */

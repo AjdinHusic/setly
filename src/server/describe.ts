@@ -3,11 +3,39 @@ import type {
   FieldMeta,
   FieldType,
   ParameterNode,
+  ScalarFieldType,
 } from "./types.js";
 import { isFieldMeta } from "./types.js";
 import { splitEnvKey } from "./nesting.js";
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inferListItemType(arr: unknown[]): ScalarFieldType | null {
+  if (arr.length === 0) return "string";
+  let itemType: ScalarFieldType | null = null;
+  for (const item of arr) {
+    if (typeof item === "string") {
+      if (itemType && itemType !== "string") return null;
+      itemType = "string";
+    } else if (typeof item === "number") {
+      if (itemType && itemType !== "number") return null;
+      itemType = "number";
+    } else if (typeof item === "boolean") {
+      if (itemType && itemType !== "boolean") return null;
+      itemType = "boolean";
+    } else {
+      return null;
+    }
+  }
+  return itemType ?? "string";
+}
+
 function inferType(value: unknown): FieldType {
+  if (Array.isArray(value)) {
+    return inferListItemType(value) ? "list" : "json";
+  }
   if (typeof value === "boolean") return "boolean";
   if (typeof value === "number") return "number";
   if (typeof value === "string") return "string";
@@ -19,10 +47,6 @@ function defaultLabel(key: string): string {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Build describe Parameters tree from appsettings leaves */
@@ -38,6 +62,13 @@ export function generateParameters(
       result[key] = generateParameters(child);
     } else if (isPlainObject(child)) {
       result[key] = makeField(key, child, "json");
+    } else if (Array.isArray(child)) {
+      const itemType = inferListItemType(child);
+      if (itemType) {
+        result[key] = makeField(key, child, "list", itemType);
+      } else {
+        result[key] = makeField(key, child, "json");
+      }
     } else {
       result[key] = makeField(key, child, inferType(child));
     }
@@ -45,13 +76,19 @@ export function generateParameters(
   return result;
 }
 
-function makeField(key: string, value: unknown, type: FieldType): FieldMeta {
+function makeField(
+  key: string,
+  value: unknown,
+  type: FieldType,
+  itemType?: ScalarFieldType,
+): FieldMeta {
   return {
     InitialValue: value,
     Type: type,
     Description: "",
     Label: defaultLabel(key),
     Required: false,
+    ...(type === "list" && itemType ? { ItemType: itemType } : {}),
   };
 }
 
@@ -334,7 +371,11 @@ export function buildAppsettingsFromValues(
     const key = field.path.join(".");
     let value: unknown;
     if (Object.prototype.hasOwnProperty.call(values, key)) {
-      value = coerceValue(values[key], field.meta.Type);
+      value = coerceValue(
+        values[key],
+        field.meta.Type,
+        field.meta.ItemType,
+      );
     } else {
       value = field.meta.InitialValue;
     }
@@ -343,7 +384,28 @@ export function buildAppsettingsFromValues(
   return result;
 }
 
-export function coerceValue(value: unknown, type: FieldType): unknown {
+export function coerceValue(
+  value: unknown,
+  type: FieldType,
+  itemType?: ScalarFieldType,
+): unknown {
+  if (type === "list") {
+    let arr: unknown[] = [];
+    if (Array.isArray(value)) {
+      arr = value;
+    } else if (typeof value === "string" && value.trim() !== "") {
+      try {
+        const parsed = JSON.parse(value) as unknown;
+        if (Array.isArray(parsed)) arr = parsed;
+      } catch {
+        arr = [];
+      }
+    } else if (value == null) {
+      arr = [];
+    }
+    const elementType: ScalarFieldType = itemType ?? "string";
+    return arr.map((item) => coerceValue(item, elementType));
+  }
   if (type === "number") {
     if (typeof value === "number") return value;
     if (typeof value === "string" && value.trim() !== "") {

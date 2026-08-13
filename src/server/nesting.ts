@@ -56,7 +56,7 @@ export function splitEnvKey(key: string, separator: string): string[] {
   return key.split(separator).filter((part) => part.length > 0);
 }
 
-/** Unflatten KEY__NESTED=value into nested objects. */
+/** Unflatten KEY__NESTED=value into nested objects (and indexed arrays). */
 export function unflattenEnvRecord(
   flat: Record<string, unknown>,
   separator: string,
@@ -75,15 +75,13 @@ export function unflattenEnvRecord(
       const part = parts[i]!;
       const existing = current[part];
       if (!isPlainObject(existing)) {
-        // Conflict: leaf vs object — promote to object, keep prior leaf under ""
-        current[part] = isPlainObject(existing) ? existing : {};
+        current[part] = {};
       }
       current = current[part] as Record<string, unknown>;
     }
     const leaf = parts[parts.length - 1]!;
     const prior = current[leaf];
     if (isPlainObject(prior) && Object.keys(prior).length > 0) {
-      // Prefer keeping nested object; stash scalar if needed
       if (value !== "" && value !== undefined) {
         prior["_"] = value;
       }
@@ -92,11 +90,12 @@ export function unflattenEnvRecord(
     }
   }
 
-  return result;
+  return collapseIndexedMaps(result) as Record<string, unknown>;
 }
 
 /**
  * Flatten nested config into env-style keys with the given separator.
+ * Scalar arrays become indexed keys: Features_AllowedOrigins_0, _1, …
  */
 export function flattenToEnvRecord(
   data: unknown,
@@ -108,6 +107,14 @@ export function flattenToEnvRecord(
 
   const sep = separator || DEFAULT_ENV_SEPARATOR;
   const out: Record<string, unknown> = {};
+
+  function isScalar(value: unknown): boolean {
+    return (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    );
+  }
 
   function walk(node: unknown, parts: string[]) {
     if (isPlainObject(node)) {
@@ -122,6 +129,21 @@ export function flattenToEnvRecord(
       return;
     }
 
+    if (Array.isArray(node)) {
+      if (parts.length === 0) {
+        throw new Error(".env root must be a flat or nested object of values");
+      }
+      if (node.length === 0) return;
+      if (node.every(isScalar)) {
+        node.forEach((item, index) => {
+          out[[...parts, String(index)].join(sep)] = item;
+        });
+        return;
+      }
+      out[parts.join(sep)] = JSON.stringify(node);
+      return;
+    }
+
     if (parts.length === 0) {
       throw new Error(".env root must be a flat or nested object of values");
     }
@@ -129,8 +151,6 @@ export function flattenToEnvRecord(
     const key = parts.join(sep);
     if (node === undefined || node === null) {
       out[key] = "";
-    } else if (typeof node === "object") {
-      out[key] = JSON.stringify(node);
     } else {
       out[key] = node;
     }
@@ -138,6 +158,32 @@ export function flattenToEnvRecord(
 
   walk(data, []);
   return out;
+}
+
+/** Collapse plain objects whose keys are dense integer indices into arrays. */
+export function collapseIndexedMaps(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(collapseIndexedMaps);
+  }
+  if (!isPlainObject(value)) return value;
+
+  const collapsed: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    collapsed[key] = collapseIndexedMaps(child);
+  }
+
+  const keys = Object.keys(collapsed);
+  if (keys.length === 0) return collapsed;
+  if (!keys.every((k) => /^\d+$/.test(k))) return collapsed;
+
+  const indices = keys.map(Number).sort((a, b) => a - b);
+  if (indices[0] !== 0) return collapsed;
+  const max = indices[indices.length - 1]!;
+  if (indices.length !== max + 1) return collapsed;
+  for (let i = 0; i <= max; i++) {
+    if (!(String(i) in collapsed)) return collapsed;
+  }
+  return indices.map((i) => collapsed[String(i)]);
 }
 
 function toCamelCase(segment: string): string {
