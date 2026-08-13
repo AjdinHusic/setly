@@ -37,22 +37,22 @@ body {
 
 @layer components {
   .input {
-    @apply w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink shadow-sm outline-none transition
+    @apply w-full rounded-md border border-line bg-panel px-2.5 py-1 text-[13px] leading-snug text-ink shadow-sm outline-none transition
       placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-white
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[13px] font-semibold text-white
       shadow-sm transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-panel px-3.5 py-2 text-sm font-medium text-ink
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-line bg-panel px-3 py-1.5 text-[13px] font-medium text-ink
       shadow-sm transition hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted transition
+    @apply inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-[13px] text-muted transition
       hover:bg-panel-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
   }
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import type { DropdownOption, FieldType } from "../api";
+import { OptionSelect } from "./OptionSelect";
 
 const TYPES: FieldType[] = ["string", "number", "boolean", "json", "dropdown"];
 
@@ -29,8 +30,8 @@ export function AddParameterForm({
   const [required, setRequired] = useState(false);
   const [initialRaw, setInitialRaw] = useState("");
   const [options, setOptions] = useState<DropdownOption[]>([
-    { Label: "LOCAL", Value: "localhost:5174" },
-    { Label: "PROD", Value: "api.example.com" },
+    { Label: "Local", Value: "http://localhost:5174" },
+    { Label: "Production", Value: "https://api.example.com" },
   ]);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,8 +85,8 @@ export function AddParameterForm({
       setInitialRaw("");
       setType("string");
       setOptions([
-        { Label: "LOCAL", Value: "localhost:5174" },
-        { Label: "PROD", Value: "api.example.com" },
+        { Label: "Local", Value: "http://localhost:5174" },
+        { Label: "Production", Value: "https://api.example.com" },
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -177,9 +178,9 @@ export function AddParameterForm({
             {options.map((opt, index) => (
               <div key={index} className="flex flex-wrap items-center gap-2">
                 <input
-                  className="input max-w-[8rem] font-mono text-[12px]"
+                  className="input max-w-[8rem] text-[12px] font-semibold"
                   value={opt.Label}
-                  placeholder="LOCAL"
+                  placeholder="Label"
                   onChange={(e) =>
                     setOptions((prev) =>
                       prev.map((row, i) =>
@@ -188,7 +189,6 @@ export function AddParameterForm({
                     )
                   }
                 />
-                <span className="text-xs text-muted">→</span>
                 <input
                   className="input min-w-0 flex-1 font-mono text-[12px]"
                   value={opt.Value}
@@ -219,18 +219,12 @@ export function AddParameterForm({
               >
                 Default value
               </label>
-              <select
+              <OptionSelect
                 id="add-initial"
-                className="input max-w-md"
                 value={initialRaw || options[0]?.Value || ""}
-                onChange={(e) => setInitialRaw(e.target.value)}
-              >
-                {options.map((opt) => (
-                  <option key={`${opt.Label}:${opt.Value}`} value={opt.Value}>
-                    [{opt.Label}] {opt.Value}
-                  </option>
-                ))}
-              </select>
+                options={options}
+                onChange={setInitialRaw}
+              />
             </div>
           </div>
         ) : (

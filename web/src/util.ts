@@ -419,6 +419,50 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
+export function countValueChanges(
+  current: Record<string, unknown>,
+  baseline: Record<string, unknown>,
+): number {
+  const keys = new Set([
+    ...Object.keys(current),
+    ...Object.keys(baseline),
+  ]);
+  let n = 0;
+  for (const key of keys) {
+    if (!valuesEqual(current[key], baseline[key])) n += 1;
+  }
+  return n;
+}
+
+export function countDescribeChanges(
+  current: DescribeConfig,
+  baseline: DescribeConfig,
+): number {
+  const curFields = flattenParameters(current.Parameters);
+  const baseFields = flattenParameters(baseline.Parameters);
+  const baseByKey = new Map(baseFields.map((f) => [f.pathKey, f.meta]));
+  const curKeys = new Set(curFields.map((f) => f.pathKey));
+  let n = 0;
+  for (const field of curFields) {
+    const base = baseByKey.get(field.pathKey);
+    if (!base || !valuesEqual(field.meta, base)) n += 1;
+  }
+  for (const field of baseFields) {
+    if (!curKeys.has(field.pathKey)) n += 1;
+  }
+  return n;
+}
+
+export function cloneDescribe(describe: DescribeConfig): DescribeConfig {
+  return structuredClone(describe);
+}
+
+export function cloneValues(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  return structuredClone(values);
+}
+
 export function formatDefaultValue(value: unknown, type: string): string {
   if (type === "json") {
     try {

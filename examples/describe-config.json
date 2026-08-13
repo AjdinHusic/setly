@@ -16,27 +16,27 @@
                 "Label": "Host Port",
                 "Required": true
             },
-      "PublicUrl": {
-        "InitialValue": "http://localhost:5174",
-        "Type": "dropdown",
-        "Description": "Public base URL used in redirects and emails.",
-        "Label": "Public URL",
-        "Required": true,
-        "Options": [
-          {
-            "Label": "LOCAL",
-            "Value": "http://localhost:5174"
-          },
-          {
-            "Label": "STAGE",
-            "Value": "https://staging-api.example.com"
-          },
-          {
-            "Label": "PROD",
-            "Value": "https://api.example.com"
-          }
-        ]
-      }
+            "PublicUrl": {
+                "InitialValue": "http://localhost:5174",
+                "Type": "dropdown",
+                "Description": "Public base URL used in redirects and emails. and more things.\n",
+                "Label": "Public URL",
+                "Required": true,
+                "Options": [
+                    {
+                        "Label": "Local",
+                        "Value": "http://localhost:5174"
+                    },
+                    {
+                        "Label": "Staging",
+                        "Value": "https://staging-api.example.com"
+                    },
+                    {
+                        "Label": "Production",
+                        "Value": "https://api.example.com"
+                    }
+                ]
+            }
         },
         "Database": {
             "Connection": {

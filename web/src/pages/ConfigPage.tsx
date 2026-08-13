@@ -18,10 +18,14 @@ import { AddParameterForm } from "../components/AddParameterForm";
 import { ConfigForm } from "../components/ConfigForm";
 import { ConfigOutlineNav } from "../components/ConfigOutlineNav";
 import { GenerateActions } from "../components/GenerateActions";
-import { MetaEditor } from "../components/MetaEditor";
+import { Modal } from "../components/Modal";
 import { PathsInfoButton } from "../components/PathsInfoButton";
 import {
   buildOutline,
+  cloneDescribe,
+  cloneValues,
+  countDescribeChanges,
+  countValueChanges,
   defaultValueForType,
   defaultsFromDescribe,
   findProjectForConfigPath,
@@ -32,8 +36,6 @@ import {
   projectHref,
   updateFieldMetaAtPath,
 } from "../util";
-
-type Tab = "configure" | "describe" | "preview";
 
 function suggestedOutputName(
   sourcePath: string,
@@ -46,6 +48,47 @@ function suggestedOutputName(
   if (outputProviderId === "json") return "appsettings.json";
   return base;
 }
+
+function IconPlus() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function IconReset() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
+const thinBtn =
+  "inline-flex items-center gap-1.5 rounded-md border border-line bg-panel px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function ConfigPage() {
   const [searchParams] = useSearchParams();
@@ -64,14 +107,20 @@ export function ConfigPage() {
     null,
   );
   const [describe, setDescribe] = useState<DescribeConfig | null>(null);
+  const [baselineDescribe, setBaselineDescribe] =
+    useState<DescribeConfig | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
+  const [baselineValues, setBaselineValues] = useState<
+    Record<string, unknown>
+  >({});
   const [stalePaths, setStalePaths] = useState<string[]>([]);
-  const [tab, setTab] = useState<Tab>("configure");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [savingMeta, setSavingMeta] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [addParamOpen, setAddParamOpen] = useState(false);
   const [genMessage, setGenMessage] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
   const [highlightPathKey, setHighlightPathKey] = useState<string | null>(
@@ -94,6 +143,15 @@ export function ConfigPage() {
   );
 
   const activeOutputProviderId = outputProviderId ?? providerId;
+
+  const pending = useMemo(() => {
+    if (!describe || !baselineDescribe) return null;
+    const descriptions = countDescribeChanges(describe, baselineDescribe);
+    const valueCount = countValueChanges(values, baselineValues);
+    const total = descriptions + valueCount;
+    if (total === 0) return null;
+    return { total, descriptions, values: valueCount };
+  }, [describe, baselineDescribe, values, baselineValues]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,8 +181,9 @@ export function ConfigPage() {
     setGenMessage(null);
     setGenError(null);
     setPreview(null);
+    setPreviewOpen(false);
+    setAddParamOpen(false);
     setHighlightPathKey(null);
-    setTab("configure");
 
     openConfig(filePath)
       .then((result) => {
@@ -135,7 +194,9 @@ export function ConfigPage() {
         setProviderLabel(result.providerLabel);
         setOutputProviderId(result.providerId);
         setDescribe(result.describe);
+        setBaselineDescribe(cloneDescribe(result.describe));
         setValues(result.values);
+        setBaselineValues(cloneValues(result.values));
         setStalePaths(result.stalePaths);
         refreshProjects();
         if (result.createdDescribe) {
@@ -149,6 +210,9 @@ export function ConfigPage() {
         setError(err instanceof Error ? err.message : String(err));
         setTargetPath(null);
         setDescribe(null);
+        setBaselineDescribe(null);
+        setValues({});
+        setBaselineValues({});
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -158,34 +222,6 @@ export function ConfigPage() {
       cancelled = true;
     };
   }, [filePath, refreshProjects]);
-
-  useEffect(() => {
-    if (
-      tab !== "preview" ||
-      !targetPath ||
-      !describe ||
-      !activeOutputProviderId
-    ) {
-      return;
-    }
-    let cancelled = false;
-    setPreviewError(null);
-    generateConfig(targetPath, values, "preview", {
-      outputProviderId: activeOutputProviderId,
-    })
-      .then((result) => {
-        if (!cancelled) setPreview(result.text);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setPreview(null);
-          setPreviewError(err instanceof Error ? err.message : String(err));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, targetPath, values, describe, activeOutputProviderId]);
 
   function handleValueChange(pathKey: string, value: unknown) {
     setValues((prev) => ({ ...prev, [pathKey]: value }));
@@ -210,6 +246,13 @@ export function ConfigPage() {
     setFieldErrors({});
   }
 
+  async function persistDescribe(next: DescribeConfig) {
+    if (!targetPath) return;
+    const result = await saveDescribe(targetPath, next);
+    setDescribe(result.describe);
+    setBaselineDescribe(cloneDescribe(result.describe));
+  }
+
   function handleMetaChange(path: string[], patch: Partial<FieldMeta>) {
     setDescribe((prev) => {
       if (!prev) return prev;
@@ -220,18 +263,52 @@ export function ConfigPage() {
     });
   }
 
-  async function handleSaveDescribe() {
-    if (!targetPath || !describe) return;
-    setSavingMeta(true);
+  function handleCancelPending() {
+    if (!baselineDescribe) return;
+    setDescribe(cloneDescribe(baselineDescribe));
+    setValues(cloneValues(baselineValues));
+    setFieldErrors({});
+    setGenError(null);
+    setInfo(null);
+  }
+
+  async function handleSavePending() {
+    if (!targetPath || !describe || !providerId || !baselineDescribe) return;
+    const descriptions = countDescribeChanges(describe, baselineDescribe);
+    const valueCount = countValueChanges(values, baselineValues);
+    if (descriptions === 0 && valueCount === 0) return;
+
+    if (valueCount > 0 && !validate()) {
+      setGenError("Fix required fields before saving values.");
+      return;
+    }
+
+    setSavingEdits(true);
+    setGenError(null);
+    setGenMessage(null);
     setError(null);
     try {
-      const result = await saveDescribe(targetPath, describe);
-      setDescribe(result.describe);
-      setInfo(`Saved ${result.describePath}`);
+      if (descriptions > 0) {
+        await persistDescribe(describe);
+      }
+      if (valueCount > 0) {
+        const result = await generateConfig(targetPath, values, "overwrite", {
+          outputProviderId: providerId,
+        });
+        setBaselineValues(cloneValues(values));
+        setGenMessage(
+          descriptions > 0
+            ? `Saved describe and ${result.writtenPath ?? result.targetPath}`
+            : `Saved ${result.writtenPath ?? result.targetPath}`,
+        );
+      } else {
+        setGenMessage("Describe metadata saved.");
+      }
+      await refreshProjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setGenError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSavingMeta(false);
+      setSavingEdits(false);
     }
   }
 
@@ -253,9 +330,7 @@ export function ConfigPage() {
       Description: input.description,
       Label: input.label.trim() || leafKey,
       Required: input.required,
-      ...(input.type === "dropdown"
-        ? { Options: input.options ?? [] }
-        : {}),
+      ...(input.type === "dropdown" ? { Options: input.options ?? [] } : {}),
     };
     const nextDescribe: DescribeConfig = {
       ...describe,
@@ -266,16 +341,21 @@ export function ConfigPage() {
       ...prev,
       [path.join(".")]: input.initialValue,
     }));
-    setSavingMeta(true);
+    setSavingEdits(true);
     try {
       const result = await saveDescribe(targetPath, nextDescribe);
       setDescribe(result.describe);
-      setInfo(`Added ${path.join(".")} and saved describe-config.json`);
-      setTab("describe");
+      setBaselineDescribe(cloneDescribe(result.describe));
+      setBaselineValues((prev) => ({
+        ...prev,
+        [path.join(".")]: input.initialValue,
+      }));
+      setInfo(`Added ${path.join(".")}`);
+      setAddParamOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSavingMeta(false);
+      setSavingEdits(false);
     }
   }
 
@@ -291,10 +371,24 @@ export function ConfigPage() {
     return Object.keys(next).length === 0;
   }
 
+  async function openPreviewModal() {
+    if (!targetPath || !activeOutputProviderId) return;
+    setPreviewOpen(true);
+    setPreviewError(null);
+    setPreview(null);
+    try {
+      const result = await generateConfig(targetPath, values, "preview", {
+        outputProviderId: activeOutputProviderId,
+      });
+      setPreview(result.text);
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function runGenerate(action: "overwrite" | "copy" | "write") {
     if (!targetPath || !providerId || !activeOutputProviderId) return;
     if (!validate()) {
-      setTab("configure");
       setGenError("Fix required fields before generating.");
       return;
     }
@@ -334,6 +428,7 @@ export function ConfigPage() {
         );
       } else {
         setGenMessage(`Wrote ${result.writtenPath ?? result.targetPath}`);
+        setBaselineValues(cloneValues(values));
       }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err));
@@ -397,6 +492,9 @@ export function ConfigPage() {
             targetPath={targetPath}
             describePath={describePath}
           />
+          {savingEdits && (
+            <span className="text-[11px] text-muted">Saving…</span>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {providerLabel && (
@@ -430,109 +528,51 @@ export function ConfigPage() {
           )}
 
           <section className="rounded-xl border border-line bg-panel p-5 shadow-sm">
-            <div className="mb-4 flex gap-1 border-b border-line">
-              {(
-                [
-                  ["configure", "Configure"],
-                  ["describe", "Describe"],
-                  ["preview", "Preview"],
-                ] as const
-              ).map(([id, label]) => (
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted">
+                Click labels, descriptions, type, or defaults to edit. Changes
+                stay local until you save from the toolbar.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
-                  key={id}
                   type="button"
-                  className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
-                    tab === id
-                      ? "border-accent text-ink"
-                      : "border-transparent text-muted hover:text-ink"
-                  }`}
-                  onClick={() => setTab(id)}
+                  className={thinBtn}
+                  onClick={() => setAddParamOpen(true)}
                 >
-                  {label}
+                  <IconPlus />
+                  Add parameter
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className={thinBtn}
+                  onClick={handleResetAll}
+                >
+                  <IconReset />
+                  Reset defaults
+                </button>
+              </div>
             </div>
-
-            {tab === "configure" && (
-              <>
-                <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted">
-                    Defaults come from describe-config InitialValue. Sections
-                    group related keys.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={handleResetAll}
-                  >
-                    Reset all to defaults
-                  </button>
-                </div>
-                <ConfigForm
-                  parameters={describe.Parameters}
-                  fields={fields}
-                  values={values}
-                  errors={fieldErrors}
-                  onChange={handleValueChange}
-                  onResetField={handleResetField}
-                  highlightPathKey={highlightPathKey}
-                />
-              </>
-            )}
-
-            {tab === "describe" && (
-              <div className="space-y-6">
-                <AddParameterForm
-                  onAdd={handleAddParameter}
-                  busy={savingMeta}
-                  defaultValueForType={defaultValueForType}
-                />
-                <MetaEditor
-                  fields={fields}
-                  onChange={handleMetaChange}
-                  onSave={handleSaveDescribe}
-                  saving={savingMeta}
-                />
-              </div>
-            )}
-
-            {tab === "preview" && (
-              <div>
-                <p className="mb-3 text-sm text-muted">
-                  Live preview as{" "}
-                  <span className="font-medium text-ink">{outputLabel}</span>{" "}
-                  from the current form values.
-                </p>
-                {previewError && (
-                  <p className="mb-3 text-sm text-danger">{previewError}</p>
-                )}
-                {preview !== null ? (
-                  <pre className="max-h-[28rem] overflow-auto rounded-lg border border-line bg-panel-2 p-3 font-mono text-xs leading-relaxed text-ink">
-                    {preview}
-                  </pre>
-                ) : (
-                  !previewError && (
-                    <p className="text-sm text-muted">Building preview…</p>
-                  )
-                )}
-              </div>
-            )}
+            <ConfigForm
+              parameters={describe.Parameters}
+              fields={fields}
+              values={values}
+              errors={fieldErrors}
+              onChange={handleValueChange}
+              onResetField={handleResetField}
+              onMetaChange={handleMetaChange}
+              highlightPathKey={highlightPathKey}
+            />
           </section>
         </div>
 
-        {tab === "configure" && (
-          <aside className="w-full shrink-0 md:sticky md:top-4 md:w-56 xl:w-64">
-            <ConfigOutlineNav
-              outline={outline}
-              fields={fields}
-              values={values}
-              onNavigate={(pathKey) => {
-                setHighlightPathKey(pathKey);
-                setTab("configure");
-              }}
-            />
-          </aside>
-        )}
+        <aside className="w-full shrink-0 md:sticky md:top-4 md:w-56 xl:w-64">
+          <ConfigOutlineNav
+            outline={outline}
+            fields={fields}
+            values={values}
+            onNavigate={(pathKey) => setHighlightPathKey(pathKey)}
+          />
+        </aside>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 md:left-72">
@@ -545,11 +585,51 @@ export function ConfigPage() {
           onOverwrite={() => runGenerate("overwrite")}
           onCopy={() => runGenerate("copy")}
           onWriteFile={() => runGenerate("write")}
+          onPreview={() => void openPreviewModal()}
           message={genMessage}
           error={genError}
           targetLabel={fileName}
+          pending={pending}
+          onCancelPending={handleCancelPending}
+          onSavePending={() => void handleSavePending()}
+          saveBusy={savingEdits}
         />
       </div>
+
+      <Modal
+        open={addParamOpen}
+        onClose={() => setAddParamOpen(false)}
+        title="Add parameter"
+      >
+        <AddParameterForm
+          onAdd={handleAddParameter}
+          busy={savingEdits}
+          defaultValueForType={defaultValueForType}
+        />
+      </Modal>
+
+      <Modal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title={`Preview · ${outputLabel}`}
+        wide
+      >
+        <p className="mb-3 text-sm text-muted">
+          Generated output for the selected format from current form values.
+        </p>
+        {previewError && (
+          <p className="mb-3 text-sm text-danger">{previewError}</p>
+        )}
+        {preview !== null ? (
+          <pre className="max-h-[28rem] overflow-auto rounded-lg border border-line bg-panel-2 p-3 font-mono text-xs leading-relaxed text-ink">
+            {preview}
+          </pre>
+        ) : (
+          !previewError && (
+            <p className="text-sm text-muted">Building preview…</p>
+          )
+        )}
+      </Modal>
     </div>
   );
 }

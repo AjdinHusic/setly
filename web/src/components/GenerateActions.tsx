@@ -1,5 +1,11 @@
 import type { ProviderId, ProviderInfo } from "../api";
 
+export interface PendingChanges {
+  total: number;
+  descriptions: number;
+  values: number;
+}
+
 interface GenerateActionsProps {
   busy: boolean;
   providers: ProviderInfo[];
@@ -9,15 +15,19 @@ interface GenerateActionsProps {
   onOverwrite: () => void;
   onCopy: () => void;
   onWriteFile: () => void;
+  onPreview: () => void;
   message: string | null;
   error: string | null;
   targetLabel?: string;
+  pending?: PendingChanges | null;
+  onCancelPending?: () => void;
+  onSavePending?: () => void;
+  saveBusy?: boolean;
 }
 
-function IconCopy({ className }: { className?: string }) {
+function IconCopy() {
   return (
     <svg
-      className={className}
       width="14"
       height="14"
       viewBox="0 0 24 24"
@@ -34,10 +44,9 @@ function IconCopy({ className }: { className?: string }) {
   );
 }
 
-function IconSave({ className }: { className?: string }) {
+function IconSave() {
   return (
     <svg
-      className={className}
       width="14"
       height="14"
       viewBox="0 0 24 24"
@@ -55,10 +64,9 @@ function IconSave({ className }: { className?: string }) {
   );
 }
 
-function IconOverwrite({ className }: { className?: string }) {
+function IconOverwrite() {
   return (
     <svg
-      className={className}
       width="14"
       height="14"
       viewBox="0 0 24 24"
@@ -75,6 +83,34 @@ function IconOverwrite({ className }: { className?: string }) {
   );
 }
 
+function IconPreview() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function pendingKindsLabel(pending: PendingChanges): string {
+  const parts: string[] = [];
+  if (pending.descriptions > 0) parts.push("descriptions");
+  if (pending.values > 0) parts.push("values");
+  if (parts.length === 0) return "";
+  if (parts.length === 2) return "descriptions and values";
+  return parts[0]!;
+}
+
 export function GenerateActions({
   busy,
   providers,
@@ -84,78 +120,137 @@ export function GenerateActions({
   onOverwrite,
   onCopy,
   onWriteFile,
+  onPreview,
   message,
   error,
   targetLabel = "config file",
+  pending,
+  onCancelPending,
+  onSavePending,
+  saveBusy,
 }: GenerateActionsProps) {
   const isNativeOutput = outputProviderId === sourceProviderId;
   const outputLabel =
     providers.find((p) => p.id === outputProviderId)?.label ?? outputProviderId;
 
+  const chip =
+    "inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50";
+
+  const hasPending = pending != null && pending.total > 0;
+
   return (
     <section className="border-t border-white/10 bg-[#15202b] text-white shadow-[0_-10px_40px_rgba(15,23,32,0.35)]">
-      <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">
-            Generate
-          </span>
-          <label className="sr-only" htmlFor="output-provider">
-            Output format
-          </label>
-          <select
-            id="output-provider"
-            className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs text-white outline-none focus:border-accent focus:ring-1 focus:ring-accent/40"
-            value={outputProviderId}
-            disabled={busy || providers.length === 0}
-            onChange={(e) =>
-              onOutputProviderChange(e.target.value as ProviderId)
-            }
-          >
-            {providers.map((provider) => (
-              <option
-                key={provider.id}
-                value={provider.id}
-                className="bg-[#15202b] text-ink"
-              >
-                {provider.label}
-                {provider.id === sourceProviderId ? " (native)" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-            type="button"
-            disabled={busy}
-            onClick={onCopy}
-          >
-            <IconCopy />
-            Copy {outputLabel}
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-            type="button"
-            disabled={busy}
-            onClick={onWriteFile}
-          >
-            <IconSave />
-            Write file
-          </button>
-          {isNativeOutput && (
+      {hasPending ? (
+        <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4">
+          <p className="min-w-0 text-sm text-white/90">
+            <span className="font-semibold tabular-nums text-white">
+              {pending.total} {pending.total === 1 ? "change" : "changes"}
+            </span>
+            <span className="text-white/60">
+              {" "}
+              · {pendingKindsLabel(pending)}
+            </span>
+            {pending.descriptions > 0 && pending.values > 0 && (
+              <span className="ml-2 hidden text-[11px] text-white/45 sm:inline">
+                ({pending.descriptions} describe
+                {pending.descriptions === 1 ? "" : "s"}, {pending.values} value
+                {pending.values === 1 ? "" : "s"})
+              </span>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
+              type="button"
+              className={chip}
+              disabled={saveBusy}
+              onClick={onCancelPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
               className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={saveBusy}
+              onClick={onSavePending}
+            >
+              <IconSave />
+              {saveBusy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">
+              Generate
+            </span>
+            <label className="sr-only" htmlFor="output-provider">
+              Output format
+            </label>
+            <select
+              id="output-provider"
+              className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-xs text-white outline-none focus:border-accent focus:ring-1 focus:ring-accent/40"
+              value={outputProviderId}
+              disabled={busy || providers.length === 0}
+              onChange={(e) =>
+                onOutputProviderChange(e.target.value as ProviderId)
+              }
+            >
+              {providers.map((provider) => (
+                <option
+                  key={provider.id}
+                  value={provider.id}
+                  className="bg-[#15202b] text-ink"
+                >
+                  {provider.label}
+                  {provider.id === sourceProviderId ? " (native)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              className={chip}
               type="button"
               disabled={busy}
-              onClick={onOverwrite}
+              onClick={onPreview}
             >
-              <IconOverwrite />
-              Overwrite {targetLabel}
+              <IconPreview />
+              Preview
             </button>
-          )}
+            <button
+              className={chip}
+              type="button"
+              disabled={busy}
+              onClick={onCopy}
+            >
+              <IconCopy />
+              Copy {outputLabel}
+            </button>
+            <button
+              className={chip}
+              type="button"
+              disabled={busy}
+              onClick={onWriteFile}
+            >
+              <IconSave />
+              Write file
+            </button>
+            {isNativeOutput && (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                disabled={busy}
+                onClick={onOverwrite}
+              >
+                <IconOverwrite />
+                Overwrite {targetLabel}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       {(error || message) && (
         <p
           className={`border-t border-white/10 px-3 py-1.5 text-xs sm:px-4 ${
