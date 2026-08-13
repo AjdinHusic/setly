@@ -96,10 +96,14 @@ Supported field types: `string`, `number`, `boolean`, `json`.
 
 ## Publishing to npm
 
-1. Bump `"version"` in `package.json` and push to `main`.
-2. [Release from package version](.github/workflows/release-from-version.yml) creates tag `vX.Y.Z` + a GitHub Release if that tag does not exist yet.
-3. [Publish to npm](.github/workflows/publish-npm.yml) runs on that release and publishes the package.
+Publishing uses **npm Trusted Publishing** (OIDC) from GitHub Actions — no
+`NPM_TOKEN` secret.
 
-Required secret in the repo (**Settings → Secrets and variables → Actions**):
-
-- `NPM_TOKEN` — npm automation/access token with permission to publish `@husic/setly` (or use Trusted Publishing)
+1. On [npmjs.com/package/@husic/setly](https://www.npmjs.com/package/@husic/setly) →
+   **Settings → Trusted Publisher**: GitHub Actions, `AjdinHusic` / `setly`,
+   workflow filename `publish-npm.yml` (no environment unless the job sets one).
+2. Bump `"version"` in `package.json` and push to `main`.
+3. [Release from package version](.github/workflows/release-from-version.yml) creates
+   tag `vX.Y.Z` + a GitHub Release if that tag does not exist yet.
+4. [Publish to npm](.github/workflows/publish-npm.yml) runs on that release and
+   publishes via OIDC (`permissions: id-token: write`, npm CLI ≥ 11.5.1).

@@ -22,7 +22,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/AjdinHusic/setly.git"
+    "url": "git+https://github.com/AjdinHusic/setly.git"
   },
   "bugs": {
     "url": "https://github.com/AjdinHusic/setly/issues"

@@ -1,6 +1,8 @@
 name: Publish to npm
 
-# Never run on pull_request — fork PRs must not get access to NPM_TOKEN.
+# Auth via npm Trusted Publishing (OIDC) — no NPM_TOKEN secret.
+# Requires: package Trusted Publisher on npmjs.com → GitHub Actions
+#   org/user: AjdinHusic, repo: setly, workflow: publish-npm.yml
 on:
   release:
     types: [published]
@@ -13,7 +15,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write # Required for OIDC → npm Trusted Publishing
 
 jobs:
   publish:
@@ -42,8 +44,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Trusted Publishing needs Node ≥ 22.14 and npm ≥ 11.5.1
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm for Trusted Publishing (OIDC)
+        run: npm install -g npm@latest
+
+      - name: Show toolchain
+        run: node -v && npm -v
 
       - name: Install dependencies
         run: npm ci
@@ -54,7 +63,6 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Do not set NODE_AUTH_TOKEN — that forces legacy token auth and breaks OIDC.
       - name: Publish to npm
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
