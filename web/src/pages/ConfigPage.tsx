@@ -384,7 +384,7 @@ export function ConfigPage() {
     activeOutputProviderId;
 
   return (
-    <div className="relative mx-auto max-w-6xl px-6 pt-8 pb-36">
+    <div className="relative mx-auto max-w-6xl px-6 pt-8 pb-24">
       <header className="mb-6 max-w-3xl">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
           Configuration
@@ -535,22 +535,20 @@ export function ConfigPage() {
         )}
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 md:left-72">
-        <div className="pointer-events-auto mx-auto max-w-6xl px-6 pb-4 pt-2">
-          <GenerateActions
-            busy={genBusy}
-            providers={providers}
-            sourceProviderId={providerId}
-            outputProviderId={activeOutputProviderId}
-            onOutputProviderChange={setOutputProviderId}
-            onOverwrite={() => runGenerate("overwrite")}
-            onCopy={() => runGenerate("copy")}
-            onWriteFile={() => runGenerate("write")}
-            message={genMessage}
-            error={genError}
-            targetLabel={fileName}
-          />
-        </div>
+      <div className="fixed inset-x-0 bottom-0 z-40 md:left-72">
+        <GenerateActions
+          busy={genBusy}
+          providers={providers}
+          sourceProviderId={providerId}
+          outputProviderId={activeOutputProviderId}
+          onOutputProviderChange={setOutputProviderId}
+          onOverwrite={() => runGenerate("overwrite")}
+          onCopy={() => runGenerate("copy")}
+          onWriteFile={() => runGenerate("write")}
+          message={genMessage}
+          error={genError}
+          targetLabel={fileName}
+        />
       </div>
     </div>
   );
