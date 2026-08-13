@@ -1,0 +1,21 @@
+{
+    "TargetFile": "appsettings.json",
+    "Parameters": {
+        "Host": {
+            "Name": {
+                "InitialValue": "My-App",
+                "Type": "string",
+                "Description": "The name of the host",
+                "Label": "Host Name",
+                "Required": true
+            },
+            "Port": {
+                "InitialValue": 8000,
+                "Type": "number",
+                "Description": "The port of the host",
+                "Label": "Host Port",
+                "Required": true
+            }
+        }
+    }
+}

@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-canvas: #f4f6f8;
+  --color-ink: #12181f;
+  --color-muted: #5c6b7a;
+  --color-line: #d8e0e8;
+  --color-panel: #ffffff;
+  --color-panel-2: #eef2f6;
+  --color-accent: #0f766e;
+  --color-accent-soft: #ccfbf1;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-warn: #a16207;
+  --color-warn-soft: #fef3c7;
+  --color-sidebar: #0f1720;
+  --color-sidebar-muted: #8b9aab;
+  --color-sidebar-hover: #1a2430;
+  --color-sidebar-active: #243142;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink shadow-sm outline-none transition
+      placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-white
+      shadow-sm transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-panel px-3.5 py-2 text-sm font-medium text-ink
+      shadow-sm transition hover:bg-panel-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted transition
+      hover:bg-panel-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
