@@ -1,6 +1,7 @@
 # setly
 
 [![CI](https://github.com/AjdinHusic/setly/actions/workflows/ci.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/ci.yml)
+[![Release](https://github.com/AjdinHusic/setly/actions/workflows/release-from-version.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/release-from-version.yml)
 [![Publish to npm](https://github.com/AjdinHusic/setly/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/publish-npm.yml)
 [![npm version](https://img.shields.io/npm/v/setly?color=0f766e)](https://www.npmjs.com/package/setly)
 [![npm downloads](https://img.shields.io/npm/dm/setly?color=0f766e)](https://www.npmjs.com/package/setly)
@@ -84,14 +85,10 @@ Supported field types: `string`, `number`, `boolean`, `json`.
 
 ## Publishing to npm
 
-Releases are published by [`.github/workflows/publish-npm.yml`](.github/workflows/publish-npm.yml) when you publish a GitHub Release (or run the workflow manually).
+1. Bump `"version"` in `package.json` and push to `main`.
+2. [Release from package version](.github/workflows/release-from-version.yml) creates tag `vX.Y.Z` + a GitHub Release if that tag does not exist yet.
+3. [Publish to npm](.github/workflows/publish-npm.yml) runs on that release and publishes the package.
 
 Required secret in the repo (**Settings → Secrets and variables → Actions**):
 
 - `NPM_TOKEN` — npm automation/access token with permission to publish the `setly` package
-
-Suggested release flow:
-
-1. Bump `"version"` in `package.json` (and commit).
-2. Create a GitHub Release / tag such as `v0.1.0`.
-3. The workflow builds and runs `npm publish --access public --provenance`.
