@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { browsePath, listProviders, scanProject, type ProviderInfo } from "../api";
 import type { AppOutletContext } from "../components/AppLayout";
-import { projectHref, upsertScannedProject } from "../util";
+import { configHref, projectHref, upsertScannedProject } from "../util";
 
 export function HomePage() {
   const [pathInput, setPathInput] = useState("");
@@ -10,7 +10,9 @@ export function HomePage() {
   const [browsing, setBrowsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [bootstrapping, setBootstrapping] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { refreshProjects } = useOutletContext<AppOutletContext>();
 
   useEffect(() => {
@@ -18,6 +20,44 @@ export function HomePage() {
       .then((r) => setProviders(r.providers))
       .catch(() => setProviders([]));
   }, []);
+
+  useEffect(() => {
+    const scanPath = searchParams.get("scan");
+    if (!scanPath) return;
+
+    const openPath = searchParams.get("open");
+    let cancelled = false;
+    setBootstrapping(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const scanned = await scanProject(scanPath);
+        if (cancelled) return;
+        const projects = upsertScannedProject(scanned);
+        refreshProjects();
+        const project = projects.find((p) => p.rootPath === scanned.rootPath);
+        if (cancelled) return;
+        if (openPath) {
+          navigate(configHref(openPath), { replace: true });
+        } else if (project) {
+          navigate(projectHref(project.id), { replace: true });
+        } else {
+          navigate("/", { replace: true });
+        }
+      } catch (err) {
+        if (cancelled) return;
+        navigate("/", { replace: true });
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!cancelled) setBootstrapping(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, navigate, refreshProjects]);
 
   async function handleAddProject(path: string) {
     setLoading(true);
@@ -52,7 +92,15 @@ export function HomePage() {
     }
   }
 
-  const busy = loading || browsing;
+  const busy = loading || browsing || bootstrapping;
+
+  if (bootstrapping) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-8 text-sm text-muted">
+        Scanning path from CLI…
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8 pb-16">

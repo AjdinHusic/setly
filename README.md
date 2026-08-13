@@ -1,5 +1,15 @@
 # setly
 
+[![CI](https://github.com/AjdinHusic/setly/actions/workflows/ci.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/ci.yml)
+[![Publish to npm](https://github.com/AjdinHusic/setly/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/AjdinHusic/setly/actions/workflows/publish-npm.yml)
+[![npm version](https://img.shields.io/npm/v/setly?color=0f766e)](https://www.npmjs.com/package/setly)
+[![npm downloads](https://img.shields.io/npm/dm/setly?color=0f766e)](https://www.npmjs.com/package/setly)
+[![Node.js](https://img.shields.io/node/v/setly?color=24292f)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/AjdinHusic/setly?display_name=tag&include_prereleases&color=111827)](https://github.com/AjdinHusic/setly/releases)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](https://github.com/AjdinHusic/setly/pulls)
+[![set config with clarity](https://img.shields.io/badge/set%20config-with%20clarity-5eead4?labelColor=0f1720)](https://github.com/AjdinHusic/setly)
+
 Guided UI for describing and setting application configuration across projects.
 
 Setly scans a project folder for known config files, turns them into guided forms
@@ -27,10 +37,19 @@ npm link
 setly
 ```
 
+Open a folder or config file directly:
+
+```bash
+setly .
+setly ./examples
+setly ./examples/appsettings.json
+```
+
 Flags:
 
-- `--no-open` — do not launch the browser
 - `--port <n>` — listen on a fixed port (default: ephemeral)
+- `--no-open` — do not launch the browser
+- `-h`, `--help` — show usage
 
 ## How it works
 

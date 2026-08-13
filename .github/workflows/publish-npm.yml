@@ -1,12 +1,13 @@
 name: Publish to npm
 
+# Never run on pull_request — fork PRs must not get access to NPM_TOKEN.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Optional git tag to publish (e.g. v0.1.0). Leave empty to use package.json version."
+        description: "Optional git tag to publish (e.g. v0.1.0). Must point at a commit on main. Leave empty to publish the current main HEAD."
         required: false
         type: string
 
@@ -16,12 +17,27 @@ permissions:
 
 jobs:
   publish:
+    # Releases: only when the release targets main.
+    # Manual runs: only when dispatched from the main branch.
+    if: >
+      (github.event_name == 'release' && github.event.release.target_commitish == 'main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ inputs.tag || github.event.release.tag_name || github.ref }}
+
+      - name: Verify commit is on main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Refusing to publish: checked-out commit is not on origin/main"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
