@@ -26,7 +26,7 @@ export function PathsInfoButton({
     <>
       <button
         type="button"
-        className="inline-flex size-8 items-center justify-center rounded-full border border-line bg-panel text-sm font-semibold text-muted transition hover:border-accent hover:text-accent"
+        className="inline-flex size-5 items-center justify-center rounded-full border border-line bg-panel text-[10px] font-semibold leading-none text-muted transition hover:border-accent hover:text-accent"
         aria-label="Show file paths"
         title="Paths"
         onClick={() => setOpen(true)}

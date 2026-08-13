@@ -6,7 +6,7 @@ import type {
   ParameterNode,
   ProviderId,
 } from "./api";
-import { unflattenEnvRecord } from "./nesting";
+import { splitEnvKey, unflattenEnvRecord } from "./nesting";
 
 export function isFieldMeta(node: ParameterNode): node is FieldMeta {
   return (
@@ -506,6 +506,37 @@ export function parseParameterPath(input: string): string[] {
     );
   }
   return parts;
+}
+
+/** Parse a flat env KEY into path segments using the config separator. */
+export function parseEnvParameterKey(
+  input: string,
+  separator: string,
+): string[] {
+  const trimmed = input.trim();
+  if (!trimmed) throw new Error("Environment key is required");
+  if (!/^[A-Za-z_][A-Za-z0-9_.:/-]*$/.test(trimmed)) {
+    throw new Error(
+      "Key must start with a letter or underscore and use letters, digits, or _.:/-",
+    );
+  }
+  const sep = separator || "_";
+  const parts = splitEnvKey(trimmed, sep);
+  if (parts.length === 0 || parts.some((p) => !p)) {
+    throw new Error("Key has an empty segment");
+  }
+  return parts;
+}
+
+/** Display key for UI: env KEY with separator, or dotted JSON path. */
+export function displayFieldKey(
+  path: string[],
+  options?: { separator?: string | null },
+): string {
+  if (!path.length) return "";
+  const sep = options?.separator;
+  if (sep != null && sep !== "") return path.join(sep);
+  return path.join(".");
 }
 
 export function insertFieldAtPath(

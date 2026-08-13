@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  displayFieldKey,
   fieldDomId,
   getScrollParent,
   isEmptyValue,
@@ -14,6 +15,7 @@ interface ConfigOutlineNavProps {
   fields: FlatField[];
   values: Record<string, unknown>;
   onNavigate: (pathKey: string) => void;
+  keySeparator?: string | null;
 }
 
 function collectFieldKeys(entries: OutlineEntry[]): string[] {
@@ -54,6 +56,7 @@ export function ConfigOutlineNav({
   fields,
   values,
   onNavigate,
+  keySeparator,
 }: ConfigOutlineNavProps) {
   const rootRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -213,7 +216,7 @@ export function ConfigOutlineNav({
             aria-hidden
           />
           <span className="min-w-0 truncate font-mono text-[11px] leading-snug">
-            {entry.pathKey}
+            {displayFieldKey(entry.path, { separator: keySeparator })}
           </span>
         </button>
       );

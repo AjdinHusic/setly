@@ -4,6 +4,7 @@ import { OptionSelect } from "./OptionSelect";
 import {
   fieldDomId,
   formatDefaultValue,
+  displayFieldKey,
   isEmptyValue,
   isFieldMeta,
   sectionDomId,
@@ -28,6 +29,8 @@ interface ConfigFormProps {
   onResetField: (pathKey: string) => void;
   onMetaChange: (path: string[], patch: Partial<FieldMeta>) => void;
   highlightPathKey?: string | null;
+  /** When set, field keys are shown joined with this separator (dotenv). */
+  keySeparator?: string | null;
 }
 
 type EditPart = "label" | "description" | "default" | "type" | null;
@@ -180,6 +183,7 @@ function FieldRow({
   onChange,
   onResetField,
   onMetaChange,
+  keySeparator,
 }: {
   field: FlatField;
   value: unknown;
@@ -188,9 +192,11 @@ function FieldRow({
   onChange: (pathKey: string, value: unknown) => void;
   onResetField: (pathKey: string) => void;
   onMetaChange: (path: string[], patch: Partial<FieldMeta>) => void;
+  keySeparator?: string | null;
 }) {
   const { meta, path, pathKey } = field;
   const id = fieldDomId(pathKey);
+  const shownKey = displayFieldKey(path, { separator: keySeparator });
   const missing = meta.Required && isEmptyValue(value);
   const atDefault = valuesEqual(value, meta.InitialValue);
   const [editPart, setEditPart] = useState<EditPart>(null);
@@ -320,7 +326,7 @@ function FieldRow({
           onEdit={() => startEdit("label")}
           display={
             <span className="text-[15px] font-semibold tracking-tight text-ink">
-              {meta.Label || pathKey}
+              {meta.Label || shownKey}
             </span>
           }
           editor={
@@ -343,7 +349,7 @@ function FieldRow({
           className="font-mono text-[11px] text-muted"
           htmlFor={id}
         >
-          {pathKey}
+          {shownKey}
         </label>
         {field.stale && (
           <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warn">
@@ -620,6 +626,7 @@ function ParameterTree({
   onChange,
   onResetField,
   onMetaChange,
+  keySeparator,
 }: {
   parameters: Record<string, ParameterNode>;
   prefix: string[];
@@ -631,6 +638,7 @@ function ParameterTree({
   onChange: (pathKey: string, value: unknown) => void;
   onResetField: (pathKey: string) => void;
   onMetaChange: (path: string[], patch: Partial<FieldMeta>) => void;
+  keySeparator?: string | null;
 }) {
   const entries = Object.entries(parameters);
 
@@ -639,6 +647,7 @@ function ParameterTree({
       {entries.map(([key, node]) => {
         const path = [...prefix, key];
         const pathKey = path.join(".");
+        const shownKey = displayFieldKey(path, { separator: keySeparator });
 
         if (isFieldMeta(node)) {
           const field = fieldByKey.get(pathKey);
@@ -653,6 +662,7 @@ function ParameterTree({
               onChange={onChange}
               onResetField={onResetField}
               onMetaChange={onMetaChange}
+              keySeparator={keySeparator}
             />
           );
         }
@@ -695,7 +705,7 @@ function ParameterTree({
                 {key}
               </h3>
               <p className="mt-0.5 font-mono text-[10px] text-muted">
-                {pathKey}
+                {shownKey}
               </p>
             </header>
             <div className={isTop ? "space-y-1 px-4 py-1" : "space-y-1"}>
@@ -710,6 +720,7 @@ function ParameterTree({
                 onChange={onChange}
                 onResetField={onResetField}
                 onMetaChange={onMetaChange}
+                keySeparator={keySeparator}
               />
             </div>
           </section>
@@ -728,6 +739,7 @@ export function ConfigForm({
   onResetField,
   onMetaChange,
   highlightPathKey,
+  keySeparator,
 }: ConfigFormProps) {
   if (fields.length === 0) {
     return <p className="text-sm text-muted">No configurable fields found.</p>;
@@ -747,6 +759,7 @@ export function ConfigForm({
       onChange={onChange}
       onResetField={onResetField}
       onMetaChange={onMetaChange}
+      keySeparator={keySeparator}
     />
   );
 }

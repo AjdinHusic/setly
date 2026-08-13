@@ -51,6 +51,10 @@ export function splitEnvKey(key: string, separator: string): string[] {
   return key.split(separator).filter((part) => part.length > 0);
 }
 
+export function isValidEnvKey(key: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_.:/-]*$/.test(key);
+}
+
 export function unflattenEnvRecord(
   flat: Record<string, unknown>,
   separator: string,

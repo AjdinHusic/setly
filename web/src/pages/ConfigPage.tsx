@@ -35,6 +35,7 @@ import {
   flattenParameters,
   insertFieldAtPath,
   isEmptyValue,
+  parseEnvParameterKey,
   parseParameterPath,
   projectHref,
   restructureDescribeForSeparator,
@@ -367,7 +368,13 @@ export function ConfigPage() {
     options?: DropdownOption[];
   }) {
     if (!describe || !targetPath) return;
-    const path = parseParameterPath(input.path);
+    const path =
+      providerId === "dotenv"
+        ? parseEnvParameterKey(
+            input.path,
+            describe.Separator ?? DEFAULT_ENV_SEPARATOR,
+          )
+        : parseParameterPath(input.path);
     const leafKey = path[path.length - 1]!;
     const meta: FieldMeta = {
       InitialValue: input.initialValue,
@@ -547,20 +554,20 @@ export function ConfigPage() {
             <span className="text-[11px] text-muted">Saving…</span>
           )}
         </div>
+        {parentProject && (
+          <Link
+            to={projectHref(parentProject.id)}
+            className="mt-1.5 inline-block text-base font-medium text-accent hover:underline"
+          >
+            {parentProject.label}
+          </Link>
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {providerLabel && (
             <span className="rounded-md bg-panel-2 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
               {providerLabel}
               {providerId ? ` · ${providerId}` : ""}
             </span>
-          )}
-          {parentProject && (
-            <Link
-              to={projectHref(parentProject.id)}
-              className="text-xs font-medium text-accent hover:underline"
-            >
-              {parentProject.label}
-            </Link>
           )}
         </div>
       </header>
@@ -623,6 +630,11 @@ export function ConfigPage() {
               onResetField={handleResetField}
               onMetaChange={handleMetaChange}
               highlightPathKey={highlightPathKey}
+              keySeparator={
+                providerId === "dotenv"
+                  ? (describe.Separator ?? DEFAULT_ENV_SEPARATOR)
+                  : null
+              }
             />
           </section>
         </div>
@@ -633,6 +645,11 @@ export function ConfigPage() {
             fields={fields}
             values={values}
             onNavigate={(pathKey) => setHighlightPathKey(pathKey)}
+            keySeparator={
+              providerId === "dotenv"
+                ? (describe.Separator ?? DEFAULT_ENV_SEPARATOR)
+                : null
+            }
           />
         </aside>
       </div>
@@ -671,6 +688,8 @@ export function ConfigPage() {
           onAdd={handleAddParameter}
           busy={savingEdits}
           defaultValueForType={defaultValueForType}
+          mode={providerId === "dotenv" ? "env" : "path"}
+          separator={describe.Separator ?? DEFAULT_ENV_SEPARATOR}
         />
       </Modal>
 

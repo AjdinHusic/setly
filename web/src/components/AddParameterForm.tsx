@@ -6,6 +6,10 @@ const TYPES: FieldType[] = ["string", "number", "boolean", "json", "dropdown"];
 
 interface AddParameterFormProps {
   busy: boolean;
+  /** When "env", ask for KEY instead of dotted path. */
+  mode?: "path" | "env";
+  /** Shown in env-mode help text. */
+  separator?: string;
   onAdd: (input: {
     path: string;
     label: string;
@@ -20,6 +24,8 @@ interface AddParameterFormProps {
 
 export function AddParameterForm({
   busy,
+  mode = "path",
+  separator = "_",
   onAdd,
   defaultValueForType,
 }: AddParameterFormProps) {
@@ -35,6 +41,7 @@ export function AddParameterForm({
   ]);
   const [error, setError] = useState<string | null>(null);
 
+  const isEnv = mode === "env";
   const placeholderDefault = useMemo(
     () => String(defaultValueForType(type) ?? ""),
     [defaultValueForType, type],
@@ -100,26 +107,46 @@ export function AddParameterForm({
     >
       <h3 className="text-sm font-semibold text-ink">Add parameter</h3>
       <p className="mt-1 text-xs text-muted">
-        Use a dotted path (e.g. <code className="font-mono">Host.Timeout</code>
-        ). Saved into describe-config.json.
+        {isEnv ? (
+          <>
+            Enter the environment variable key (e.g.{" "}
+            <code className="font-mono">
+              HOST{separator}NAME
+            </code>
+            ). Nesting uses separator{" "}
+            <code className="font-mono">{separator}</code>.
+          </>
+        ) : (
+          <>
+            Use a dotted path (e.g.{" "}
+            <code className="font-mono">Host.Timeout</code>). Saved into
+            describe-config.json.
+          </>
+        )}
       </p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-path">
-            Parameter path
+          <label
+            className="mb-1 block text-xs font-medium text-muted"
+            htmlFor="add-path"
+          >
+            {isEnv ? "Key" : "Parameter path"}
           </label>
           <input
             id="add-path"
             className="input font-mono text-[13px]"
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="Section.Key"
+            placeholder={isEnv ? `HOST${separator}NAME` : "Section.Key"}
             required
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-label">
+          <label
+            className="mb-1 block text-xs font-medium text-muted"
+            htmlFor="add-label"
+          >
             Label
           </label>
           <input
@@ -131,7 +158,10 @@ export function AddParameterForm({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-type">
+          <label
+            className="mb-1 block text-xs font-medium text-muted"
+            htmlFor="add-type"
+          >
             Type
           </label>
           <select
@@ -148,7 +178,10 @@ export function AddParameterForm({
           </select>
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-desc">
+          <label
+            className="mb-1 block text-xs font-medium text-muted"
+            htmlFor="add-desc"
+          >
             Description
           </label>
           <input
@@ -229,7 +262,10 @@ export function AddParameterForm({
           </div>
         ) : (
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-muted" htmlFor="add-initial">
+            <label
+              className="mb-1 block text-xs font-medium text-muted"
+              htmlFor="add-initial"
+            >
               Default (InitialValue)
             </label>
             <input
@@ -256,7 +292,11 @@ export function AddParameterForm({
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
 
       <div className="mt-3">
-        <button className="btn-primary" type="submit" disabled={busy || !path.trim()}>
+        <button
+          className="btn-primary"
+          type="submit"
+          disabled={busy || !path.trim()}
+        >
           {busy ? "Adding…" : "Add parameter"}
         </button>
       </div>
